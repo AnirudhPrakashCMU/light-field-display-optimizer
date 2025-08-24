@@ -1,0 +1,34 @@
+# Output directories
+results/
+enhanced_results/
+comprehensive_results/
+quick_test_results/
+simple_eye_results/
+
+# Temporary files
+*.pyc
+__pycache__/
+.pytest_cache/
+.coverage
+*.log
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Archive files
+*.zip
+*.tar.gz
+
+# GPU memory dumps
+*.pth
+*.pt
+
+# Matplotlib cache
+*.png
+*.gif
+*.mp4
+!README_*.png
