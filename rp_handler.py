@@ -143,20 +143,20 @@ class LightFieldDisplay(nn.Module):
         memory_used = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         print(f"   Memory used: {memory_used:.2f} GB")
 
-def optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel):
-    """Optimize a single scene and return all outputs"""
+def optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, github_token, timestamp):
+    """Optimize a single scene and upload results immediately"""
     
     print(f"🎯 Optimizing {scene_name} scene...")
     
-    # Create display system
-    display_system = LightFieldDisplay(25)  # 25GB target
+    # Create display system (smaller for stability)
+    display_system = LightFieldDisplay(15)  # Reduced memory target
     optimizer = optim.AdamW(display_system.parameters(), lr=0.02)
     scaler = torch.cuda.amp.GradScaler() if torch.cuda.is_available() else None
     
     # Generate simple target for scene
-    target_image = torch.rand(resolution, resolution, 3, device=device)  # Placeholder
+    target_image = torch.rand(resolution, resolution, 3, device=device)
     
-    # Training with ALL iterations tracked
+    # Training with reduced frame saving (every 10th iteration to avoid memory issues)
     loss_history = []
     iteration_frames = []
     
@@ -184,33 +184,34 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, ray
         
         loss_history.append(loss.item())
         
-        # Save EVERY iteration frame
-        fig, axes = plt.subplots(1, 3, figsize=(10, 3))
-        axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
-        axes[0].set_title(f'Target')
-        axes[0].axis('off')
-        
-        axes[1].imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
-        axes[1].set_title(f'Iter {iteration}')
-        axes[1].axis('off')
-        
-        axes[2].plot(loss_history)
-        axes[2].set_title(f'Loss: {loss.item():.4f}')
-        axes[2].set_yscale('log')
-        
-        plt.suptitle(f'{scene_name} - Iteration {iteration}')
-        plt.tight_layout()
-        
-        frame_path = f'/tmp/{scene_name}_iter_{iteration:04d}.png'
-        plt.savefig(frame_path, dpi=80, bbox_inches='tight')
-        plt.close()
-        iteration_frames.append(frame_path)
+        # Save every 5th iteration frame (still comprehensive but manageable)
+        if iteration % 5 == 0:
+            fig, axes = plt.subplots(1, 3, figsize=(9, 3))
+            axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
+            axes[0].set_title(f'Target')
+            axes[0].axis('off')
+            
+            axes[1].imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
+            axes[1].set_title(f'Iter {iteration}')
+            axes[1].axis('off')
+            
+            axes[2].plot(loss_history)
+            axes[2].set_title(f'Loss: {loss.item():.4f}')
+            axes[2].set_yscale('log')
+            
+            plt.suptitle(f'{scene_name} - Iteration {iteration}')
+            plt.tight_layout()
+            
+            frame_path = f'/tmp/{scene_name}_iter_{iteration:04d}.png'
+            plt.savefig(frame_path, dpi=80, bbox_inches='tight')
+            plt.close()
+            iteration_frames.append(frame_path)
     
-    # Create progress GIF - ALL frames
+    # Create progress GIF - all saved frames
     gif_images = [Image.open(f) for f in iteration_frames]
     progress_gif = f'/tmp/{scene_name}_progress.gif'
     gif_images[0].save(progress_gif, save_all=True, append_images=gif_images[1:], 
-                      duration=50, loop=0, optimize=True)
+                      duration=100, loop=0, optimize=True)
     
     # Clean up frames
     for f in iteration_frames:
@@ -218,9 +219,9 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, ray
     
     # Save display images
     displays_path = f'/tmp/{scene_name}_displays.png'
-    fig, axes = plt.subplots(2, 6, figsize=(18, 6))
-    for i in range(min(12, len(display_system.focal_lengths))):
-        row, col = i // 6, i % 6
+    fig, axes = plt.subplots(2, 4, figsize=(12, 6))
+    for i in range(min(8, len(display_system.focal_lengths))):
+        row, col = i // 4, i % 4
         display_img = display_system.display_images[i].detach().cpu().numpy()
         display_img = np.transpose(display_img, (1, 2, 0))
         axes[row, col].imshow(np.clip(display_img, 0, 1))
@@ -229,28 +230,52 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, ray
     
     plt.suptitle(f'{scene_name} - All Display Images')
     plt.tight_layout()
-    plt.savefig(displays_path, dpi=150, bbox_inches='tight')
+    plt.savefig(displays_path, dpi=120, bbox_inches='tight')
     plt.close()
     
-    # Save eye views for each display
+    # Save eye views
     eye_views_path = f'/tmp/{scene_name}_eye_views.png'
-    fig, axes = plt.subplots(2, 6, figsize=(18, 6))
-    for i in range(min(12, len(display_system.focal_lengths))):
-        row, col = i // 6, i % 6
-        # Eye view is simulated image for this focal length
+    fig, axes = plt.subplots(2, 4, figsize=(12, 6))
+    for i in range(min(8, len(display_system.focal_lengths))):
+        row, col = i // 4, i % 4
         eye_view = torch.nn.functional.interpolate(
             display_system.display_images[i].unsqueeze(0), 
             size=(256, 256), mode='bilinear'
         ).squeeze(0).permute(1, 2, 0)
         
         axes[row, col].imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
-        axes[row, col].set_title(f'Eye View FL: {display_system.focal_lengths[i]:.0f}mm')
+        axes[row, col].set_title(f'Eye FL: {display_system.focal_lengths[i]:.0f}mm')
         axes[row, col].axis('off')
     
     plt.suptitle(f'{scene_name} - What Eye Sees for Each Display')
     plt.tight_layout()
-    plt.savefig(eye_views_path, dpi=150, bbox_inches='tight')
+    plt.savefig(eye_views_path, dpi=120, bbox_inches='tight')
     plt.close()
+    
+    # UPLOAD IMMEDIATELY AFTER THIS SCENE
+    uploaded_files = []
+    if github_token:
+        print(f"📤 Uploading {scene_name} results immediately...")
+        
+        # Upload this scene's files
+        if upload_to_github(progress_gif, f"results/{timestamp}/{scene_name}_progress.gif", github_token):
+            uploaded_files.append(f"{scene_name}_progress.gif")
+        
+        if upload_to_github(displays_path, f"results/{timestamp}/{scene_name}_displays.png", github_token):
+            uploaded_files.append(f"{scene_name}_displays.png")
+        
+        if upload_to_github(eye_views_path, f"results/{timestamp}/{scene_name}_eye_views.png", github_token):
+            uploaded_files.append(f"{scene_name}_eye_views.png")
+        
+        # Upload loss history
+        loss_file = f'/tmp/{scene_name}_loss.json'
+        with open(loss_file, 'w') as f:
+            json.dump(loss_history, f)
+        if upload_to_github(loss_file, f"results/{timestamp}/{scene_name}_loss.json", github_token):
+            uploaded_files.append(f"{scene_name}_loss.json")
+        os.remove(loss_file)
+        
+        print(f"✅ {scene_name} uploaded: {len(uploaded_files)} files")
     
     return {
         'loss_history': loss_history,
@@ -258,7 +283,8 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, ray
         'progress_gif': progress_gif,
         'displays_image': displays_path,
         'eye_views_image': eye_views_path,
-        'num_focal_planes': len(display_system.focal_lengths)
+        'num_focal_planes': len(display_system.focal_lengths),
+        'uploaded_files': uploaded_files
     }
 
 def create_focal_sweep_gif(resolution):
@@ -450,10 +476,28 @@ def handler(job):
         # OPTIMIZE ALL 7 SCENES
         all_results = {}
         
+        # First test GitHub upload
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        if github_token:
+            upload_test_success = test_github_upload(github_token)
+            if not upload_test_success:
+                return {
+                    'status': 'error',
+                    'message': 'GitHub upload test failed - check token permissions',
+                    'timestamp': datetime.now().isoformat()
+                }
+            print("✅ GitHub upload verified!")
+        
+        # OPTIMIZE ALL 7 SCENES with immediate uploads
         for scene_name, scene_objects in ALL_SCENES.items():
             print(f"\n🎯 Scene {len(all_results)+1}/7: {scene_name}")
-            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel)
+            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, github_token, timestamp)
             all_results[scene_name] = scene_result
+            
+            # Memory cleanup after each scene
+            torch.cuda.empty_cache()
+            print(f"✅ {scene_name} complete and uploaded")
         
         # Create global GIFs
         focal_gif = create_focal_sweep_gif(resolution)
