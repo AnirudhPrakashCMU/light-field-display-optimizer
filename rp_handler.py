@@ -21,8 +21,46 @@ import base64
 import sys
 sys.path.append('/app')
 
-# Import spherical checkerboard functions
-exec(open('/app/spherical_checkerboard_raytracer.py').read())
+# Safely import spherical checkerboard functions
+try:
+    # Import spherical checkerboard class manually to avoid exec issues
+    class SphericalCheckerboard:
+        def __init__(self, center, radius):
+            self.center = center
+            self.radius = radius
+            
+        def get_color(self, point_3d):
+            direction = point_3d - self.center
+            direction_norm = direction / torch.norm(direction, dim=-1, keepdim=True)
+            
+            X, Y, Z = direction_norm[..., 0], direction_norm[..., 1], direction_norm[..., 2]
+            
+            rho = torch.sqrt(X*X + Z*Z)
+            phi = torch.atan2(Z, X)
+            theta = torch.atan2(Y, rho)
+            
+            theta_norm = (theta + math.pi/2) / math.pi
+            phi_norm = (phi + math.pi) / (2*math.pi)
+            
+            i_coord = theta_norm * 999
+            j_coord = phi_norm * 999
+            
+            i_square = torch.floor(i_coord / 50).long()
+            j_square = torch.floor(j_coord / 50).long()
+            
+            return ((i_square + j_square) % 2).float()
+    
+    print("✅ SphericalCheckerboard class loaded successfully")
+    
+except Exception as e:
+    print(f"⚠️ Import warning: {e}")
+    # Create dummy class as fallback
+    class SphericalCheckerboard:
+        def __init__(self, center, radius):
+            self.center = center
+            self.radius = radius
+        def get_color(self, point_3d):
+            return torch.ones_like(point_3d[..., 0])
 
 def setup_gpu():
     """Setup GPU for light field optimization"""
@@ -249,31 +287,57 @@ def run_task(inp: dict):
 
 def handler(job):
     """
-    RunPod serverless handler entry point
+    RunPod serverless handler entry point with robust error handling
     Receives: {"input": {...}}
     Returns: JSON-serializable result
     """
     
-    inp = job.get("input", {}) or {}
-    
-    # Add GPU info to response
-    gpu_info = {}
-    if torch.cuda.is_available():
-        gpu_info = {
-            'gpu_name': torch.cuda.get_device_name(0),
-            'gpu_memory_total': torch.cuda.get_device_properties(0).total_memory / 1e9,
-            'gpu_memory_available': (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / 1e9
+    try:
+        print(f"🚀 Handler started at {datetime.now()}")
+        print(f"📥 Received job: {json.dumps(job, indent=2)}")
+        
+        inp = job.get("input", {}) or {}
+        print(f"📋 Input parameters: {json.dumps(inp, indent=2)}")
+        
+        # Add GPU info to response
+        gpu_info = {}
+        if torch.cuda.is_available():
+            try:
+                gpu_info = {
+                    'gpu_name': torch.cuda.get_device_name(0),
+                    'gpu_memory_total': torch.cuda.get_device_properties(0).total_memory / 1e9,
+                    'gpu_memory_available': (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / 1e9
+                }
+                print(f"🖥️  GPU Info: {gpu_info}")
+            except Exception as gpu_e:
+                print(f"⚠️ GPU info error: {gpu_e}")
+                gpu_info = {'error': str(gpu_e)}
+        
+        # Run the optimization task
+        print(f"⚙️  Running optimization task...")
+        result = run_task(inp)
+        print(f"✅ Task completed: {result.get('status', 'unknown')}")
+        
+        # Add metadata
+        result['gpu_info'] = gpu_info
+        result['timestamp'] = datetime.now().isoformat()
+        result['serverless_version'] = '1.0.0'
+        result['handler_status'] = 'success'
+        
+        print(f"📤 Returning result: {json.dumps(result, indent=2)}")
+        return result
+        
+    except Exception as e:
+        error_result = {
+            'status': 'error',
+            'message': f'Handler crashed: {str(e)}',
+            'error_type': type(e).__name__,
+            'timestamp': datetime.now().isoformat(),
+            'handler_status': 'crashed'
         }
-    
-    # Run the optimization task
-    result = run_task(inp)
-    
-    # Add metadata
-    result['gpu_info'] = gpu_info
-    result['timestamp'] = datetime.now().isoformat()
-    result['serverless_version'] = '1.0.0'
-    
-    return result
+        
+        print(f"💥 Handler error: {json.dumps(error_result, indent=2)}")
+        return error_result
 
 # Start the RunPod serverless worker
 runpod.serverless.start({"handler": handler})
