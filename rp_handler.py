@@ -74,8 +74,8 @@ def setup_gpu():
     
     return device
 
-def run_quick_checkerboard_optimization(iterations=10, resolution=256, rays_per_pixel=8):
-    """Run quick checkerboard optimization"""
+def run_quick_checkerboard_optimization(iterations=10, resolution=256, rays_per_pixel=8, batch_size=1024, target_memory_gb=5):
+    """Run quick checkerboard optimization with configurable memory usage"""
     
     device = setup_gpu()
     
@@ -85,16 +85,37 @@ def run_quick_checkerboard_optimization(iterations=10, resolution=256, rays_per_
         radius=50.0
     )
     
-    # Simple display system
-    class SimpleDisplay(torch.nn.Module):
-        def __init__(self):
+    # Memory-scalable display system
+    class MemoryScalableDisplay(torch.nn.Module):
+        def __init__(self, target_memory_gb=5):
             super().__init__()
+            
+            # Calculate display resolution to target specific memory usage
+            # Each display image: planes * 3 * res^2 * 4 bytes
+            target_bytes = target_memory_gb * 1024**3
+            num_planes = max(8, min(32, int(target_memory_gb / 2)))  # Scale planes with memory
+            
+            # Calculate resolution to use remaining memory
+            bytes_per_pixel = num_planes * 3 * 4  # planes * RGB * float32
+            pixels_available = target_bytes // bytes_per_pixel
+            display_res = min(resolution * 4, int(pixels_available ** 0.5))  # Square root for 2D
+            display_res = max(512, display_res)  # Minimum quality
+            
+            print(f"🧠 Memory-optimized display:")
+            print(f"   Planes: {num_planes}")
+            print(f"   Display resolution: {display_res}x{display_res}")
+            print(f"   Target memory: {target_memory_gb:.1f} GB")
+            
             self.display_images = torch.nn.Parameter(
-                torch.rand(4, 3, resolution*2, resolution*2, device=device) * 0.5
+                torch.rand(num_planes, 3, display_res, display_res, device=device) * 0.5
             )
-            self.focal_lengths = torch.linspace(20, 60, 4, device=device)
+            self.focal_lengths = torch.linspace(20, 60, num_planes, device=device)
+            
+            # Report actual memory usage
+            memory_used = torch.cuda.memory_allocated() / 1024**3
+            print(f"   Actual memory used: {memory_used:.2f} GB")
     
-    display_system = SimpleDisplay()
+    display_system = MemoryScalableDisplay(target_memory_gb)
     optimizer = torch.optim.AdamW(display_system.parameters(), lr=0.02)
     
     # Training loop
@@ -230,6 +251,8 @@ def run_task(inp: dict):
     - rays_per_pixel: multi-ray sampling density (default: 8)
     - scenes: list of scenes to optimize (default: ['spherical_checkerboard'])
     - save_large_outputs: whether to save detailed outputs (default: False)
+    - batch_size: batch size for processing (default: 1024)
+    - target_memory_gb: target GPU memory usage (default: 5)
     """
     
     task_type = inp.get("task_type", "quick_test")
@@ -238,12 +261,14 @@ def run_task(inp: dict):
     rays_per_pixel = inp.get("rays_per_pixel", 8)
     scenes = inp.get("scenes", ["spherical_checkerboard"])
     save_large_outputs = inp.get("save_large_outputs", False)
+    batch_size = inp.get("batch_size", 1024)
+    target_memory_gb = inp.get("target_memory_gb", 5)
     job_id = inp.get("job_id", datetime.now().strftime("%Y%m%d_%H%M%S"))
     
     try:
         if task_type == "quick_test":
-            # Quick checkerboard test
-            results = run_quick_checkerboard_optimization(iterations, resolution, rays_per_pixel)
+            # Quick checkerboard test with memory targeting
+            results = run_quick_checkerboard_optimization(iterations, resolution, rays_per_pixel, batch_size, target_memory_gb)
             
             if save_large_outputs:
                 output_info = save_results_to_tmp(results, job_id)
