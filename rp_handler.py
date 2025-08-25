@@ -112,8 +112,8 @@ class LightFieldDisplay(nn.Module):
         memory_used = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         print(f"   Memory: {memory_used:.2f} GB")
 
-def upload_to_0x0(file_path):
-    """Upload file to file.io with robust error handling"""
+def upload_to_catbox(file_path):
+    """Upload file to catbox.moe (tested and working locally)"""
     
     if not os.path.exists(file_path):
         print(f"❌ File not found: {file_path}")
@@ -122,38 +122,26 @@ def upload_to_0x0(file_path):
     file_size = os.path.getsize(file_path) / 1024**2
     filename = os.path.basename(file_path)
     
-    print(f"📤 Uploading {filename} ({file_size:.1f} MB) to file.io...")
+    print(f"📤 Uploading {filename} ({file_size:.1f} MB) to catbox.moe...")
     
     try:
         with open(file_path, 'rb') as f:
-            files = {'file': (filename, f, 'application/octet-stream')}
-            response = requests.post('https://file.io', files=files, timeout=180)
-        
-        print(f"   Response status: {response.status_code}")
+            files = {'fileToUpload': f}
+            data = {'reqtype': 'fileupload'}
+            response = requests.post('https://catbox.moe/user/api.php', files=files, data=data, timeout=180)
         
         if response.status_code == 200:
-            try:
-                result = response.json()
-                if result.get('success', False):
-                    url = result.get('link', '')
-                    if url:
-                        print(f"✅ Uploaded successfully: {url}")
-                        return url
-                    else:
-                        print(f"❌ No download link in response: {result}")
-                else:
-                    print(f"❌ Upload failed: {result.get('message', 'Unknown error')}")
-            except json.JSONDecodeError:
-                print(f"❌ Invalid JSON response: {response.text[:200]}")
+            url = response.text.strip()
+            if url.startswith('https://'):
+                print(f"✅ Uploaded successfully: {url}")
+                return url
+            else:
+                print(f"❌ Invalid response: {response.text}")
         else:
-            print(f"❌ HTTP error {response.status_code}: {response.text[:200]}")
+            print(f"❌ Upload failed: {response.status_code}")
     
-    except requests.exceptions.Timeout:
-        print(f"❌ Upload timeout for {filename}")
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Request error: {str(e)}")
     except Exception as e:
-        print(f"❌ Unexpected error: {str(e)}")
+        print(f"❌ Upload error: {e}")
     
     return None
 
@@ -357,9 +345,9 @@ def optimize_scene(scene_name, scene_objects, iterations, resolution, rays_per_p
     # Upload all files for this scene immediately
     print(f"📤 Uploading {scene_name} results immediately...")
     
-    progress_url = upload_to_0x0(progress_gif_path)
-    displays_url = upload_to_0x0(displays_path) 
-    eye_views_url = upload_to_0x0(eye_views_path)
+    progress_url = upload_to_catbox(progress_gif_path)
+    displays_url = upload_to_catbox(displays_path) 
+    eye_views_url = upload_to_catbox(eye_views_path)
     
     # Upload loss history as JSON
     loss_json_path = f'/tmp/{scene_name}_loss_history.json'
@@ -372,7 +360,7 @@ def optimize_scene(scene_name, scene_objects, iterations, resolution, rays_per_p
             'rays_per_pixel': rays_per_pixel
         }, f, indent=2)
     
-    loss_url = upload_to_0x0(loss_json_path)
+    loss_url = upload_to_catbox(loss_json_path)
     os.remove(loss_json_path)
     
     uploaded_count = sum([1 for x in [progress_url, displays_url, eye_views_url, loss_url] if x])
@@ -537,8 +525,8 @@ def test_upload_system():
     plt.close()
     
     # Test upload
-    print("📤 Testing upload to 0x0.st...")
-    test_url = upload_to_0x0(test_image_path)
+    print("📤 Testing upload to catbox.moe...")
+    test_url = upload_to_catbox(test_image_path)
     
     if test_url:
         print(f"✅ UPLOAD TEST SUCCESSFUL!")
@@ -614,8 +602,8 @@ def handler(job):
         focal_gif_path, eye_gif_path = create_global_gifs(resolution, rays_per_pixel)
         
         # Upload global GIFs
-        focal_url = upload_to_0x0(focal_gif_path)
-        eye_url = upload_to_0x0(eye_gif_path)
+        focal_url = upload_to_catbox(focal_gif_path)
+        eye_url = upload_to_catbox(eye_gif_path)
         
         if focal_url:
             all_download_urls['focal_length_sweep.gif'] = focal_url
@@ -656,7 +644,7 @@ def handler(job):
             os.remove(summary_file)
         
         # Upload final archive
-        archive_url = upload_to_0x0(archive_path)
+        archive_url = upload_to_catbox(archive_path)
         archive_size = os.path.getsize(archive_path) / 1024**2
         
         # Final memory report
