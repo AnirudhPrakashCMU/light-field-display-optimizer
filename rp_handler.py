@@ -64,9 +64,9 @@ class MaximumLightFieldDisplay(nn.Module):
     def __init__(self, target_memory_gb):
         super().__init__()
         
-        # MAXIMUM SETTINGS
-        display_resolution = 6144  # Maximum resolution
-        num_focal_planes = max(16, min(32, int(target_memory_gb / 4)))  # Scale with memory
+        # GOOD SETTINGS
+        display_resolution = 2048  # Good resolution
+        num_focal_planes = max(8, min(16, int(target_memory_gb / 5)))  # Scale with memory
         
         print(f"🧠 MAXIMUM display system:")
         print(f"   Display resolution: {display_resolution}x{display_resolution}")
@@ -410,11 +410,11 @@ def handler(job):
         
         inp = job.get("input", {}) or {}
         
-        # MAXIMUM DEFAULTS
-        iterations = inp.get("iterations", 1000)  # MAXIMUM iterations
-        resolution = inp.get("resolution", 2048)  # MAXIMUM resolution
-        rays_per_pixel = inp.get("rays_per_pixel", 64)  # MAXIMUM rays
-        target_memory_gb = inp.get("target_memory_gb", 70)  # MAXIMUM memory
+        # OPTIMIZED DEFAULTS
+        iterations = inp.get("iterations", 500)  # More iterations
+        resolution = inp.get("resolution", 768)  # Reasonable resolution
+        rays_per_pixel = inp.get("rays_per_pixel", 24)  # Good rays per pixel
+        target_memory_gb = inp.get("target_memory_gb", 40)  # Good memory usage
         
         print(f"⚙️ MAXIMUM Parameters:")
         print(f"   Iterations: {iterations}")
