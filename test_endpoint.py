@@ -8,10 +8,11 @@ Endpoint ID: d93rynzpivo6va
 import requests
 import json
 import time
+import os
 from datetime import datetime
 
 # RunPod endpoint details from the UI
-API_KEY = "rpa_LDVD1JMIAKGTVVO4AAV82Y5PN2FJTC2ROG5N6K6N1a1hn7"
+API_KEY = os.getenv("RUNPOD_API_KEY", "your_api_key_here")
 ENDPOINT_ID = "d93rynzpivo6va"
 ENDPOINT_URL = f"https://api.runpod.ai/v2/{ENDPOINT_ID}"
 
