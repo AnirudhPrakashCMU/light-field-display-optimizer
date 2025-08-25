@@ -143,7 +143,7 @@ class LightFieldDisplay(nn.Module):
         memory_used = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         print(f"   Memory used: {memory_used:.2f} GB")
 
-def optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, github_token, timestamp):
+def optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, timestamp):
     """Optimize a single scene and upload results immediately"""
     
     print(f"🎯 Optimizing {scene_name} scene...")
@@ -452,23 +452,14 @@ def handler(job):
         # OPTIMIZE ALL 7 SCENES
         all_results = {}
         
-        # First test GitHub upload
+        # Setup timestamp for file organization
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        if github_token:
-            upload_test_success = test_github_upload(github_token)
-            if not upload_test_success:
-                return {
-                    'status': 'error',
-                    'message': 'GitHub upload test failed - check token permissions',
-                    'timestamp': datetime.now().isoformat()
-                }
-            print("✅ GitHub upload verified!")
+        print(f"📁 Results will be organized with timestamp: {timestamp}")
         
         # OPTIMIZE ALL 7 SCENES with immediate uploads
         for scene_name, scene_objects in ALL_SCENES.items():
             print(f"\n🎯 Scene {len(all_results)+1}/7: {scene_name}")
-            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, "", timestamp)
+            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, timestamp)
             all_results[scene_name] = scene_result
             
             # Memory cleanup after each scene
