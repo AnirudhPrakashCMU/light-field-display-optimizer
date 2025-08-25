@@ -718,6 +718,8 @@ def optimize_spherical_checkerboard(iterations, resolution):
     print("="*80)
     
     return {
+        'status': 'success',
+        'message': f'ACTUAL optimization complete: {iterations} iterations, loss: {loss_history[-1]:.6f}',
         'final_loss': loss_history[-1],
         'loss_history': loss_history,
         'progress_gif_url': progress_url,
@@ -728,7 +730,7 @@ def optimize_spherical_checkerboard(iterations, resolution):
         'eye_movement_url': eye_movement_url,
         'loss_history_url': loss_url,
         'focal_data_url': focal_data_url,
-        'all_outputs': {
+        'all_download_urls': {
             'progress_gif': progress_url,
             'final_comparison': comparison_url,
             'what_displays_show': displays_url,
@@ -738,7 +740,18 @@ def optimize_spherical_checkerboard(iterations, resolution):
             'loss_history_json': loss_url,
             'focal_data_json': focal_data_url
         },
-        'focal_lengths_mm': display_system.focal_lengths.cpu().tolist()
+        'display_focal_lengths_mm': display_system.focal_lengths.cpu().tolist(),
+        'optimization_specs': {
+            'iterations': iterations,
+            'resolution': resolution,
+            'rays_per_pixel': 4,
+            'display_resolution': 512,
+            'focal_planes': 4,
+            'frames_in_progress_gif': iterations,
+            'frames_in_focal_sweep': 30,
+            'frames_in_eye_movement': 20
+        },
+        'timestamp': datetime.now().isoformat()
     }
 
 def handler(job):
@@ -765,33 +778,7 @@ def handler(job):
         # Run ACTUAL optimization
         result = optimize_spherical_checkerboard(iterations, resolution)
         
-        return {
-            'status': 'success',
-            'message': f'ACTUAL optimization complete: {iterations} iterations, loss: {result["final_loss"]:.6f}',
-            'test_upload_url': test_url,
-            'progress_gif_url': result['progress_gif_url'],
-            'final_comparison_url': result['final_comparison_url'],
-            'displays_url': result['displays_url'],
-            'eye_views_url': result['eye_views_url'],
-            'focal_sweep_url': result['focal_sweep_url'],
-            'eye_movement_url': result['eye_movement_url'],
-            'loss_history_url': result['loss_history_url'],
-            'focal_data_url': result['focal_data_url'],
-            'final_loss': result['final_loss'],
-            'all_download_urls': result['all_outputs'],
-            'display_focal_lengths_mm': result['focal_lengths_mm'],
-            'optimization_specs': {
-                'iterations': iterations,
-                'resolution': resolution,
-                'rays_per_pixel': 4,
-                'display_resolution': 512,
-                'focal_planes': 4,
-                'frames_in_progress_gif': iterations,
-                'frames_in_focal_sweep': 30,
-                'frames_in_eye_movement': 20
-            },
-            'timestamp': datetime.now().isoformat()
-        }
+        return result  # Return the complete result with all URLs
         
     except Exception as e:
         return {'status': 'error', 'message': str(e)}
