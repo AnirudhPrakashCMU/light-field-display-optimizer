@@ -434,7 +434,7 @@ def handler(job):
         resolution = inp.get("resolution", 512)
         rays_per_pixel = inp.get("rays_per_pixel", 16)
         target_memory_gb = inp.get("target_memory_gb", 25)
-        github_token = inp.get("github_token", "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")  # Default token
+        github_token = inp.get("github_token", "")  # No default token for security
         
         print(f"⚙️ Parameters: {iterations} iterations, {resolution}x{resolution}, {rays_per_pixel} rays/pixel")
         
