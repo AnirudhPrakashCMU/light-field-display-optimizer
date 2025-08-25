@@ -510,11 +510,62 @@ def create_global_gifs(resolution, rays_per_pixel):
     
     return focal_gif_path, eye_gif_path
 
+def test_upload_system():
+    """Test upload system with a simple checkerboard image"""
+    
+    print("🧪 TESTING UPLOAD SYSTEM...")
+    
+    # Create simple checkerboard test image
+    test_resolution = 256
+    checkerboard = torch.zeros(test_resolution, test_resolution, 3, device=device)
+    
+    # Create checkerboard pattern
+    square_size = 32
+    for i in range(0, test_resolution, square_size):
+        for j in range(0, test_resolution, square_size):
+            if (i // square_size + j // square_size) % 2 == 0:
+                checkerboard[i:i+square_size, j:j+square_size] = 1.0
+    
+    # Save test image
+    plt.figure(figsize=(6, 6))
+    plt.imshow(checkerboard.cpu().numpy())
+    plt.title('Upload Test - Checkerboard Pattern')
+    plt.axis('off')
+    
+    test_image_path = '/tmp/upload_test_checkerboard.png'
+    plt.savefig(test_image_path, dpi=100, bbox_inches='tight')
+    plt.close()
+    
+    # Test upload
+    print("📤 Testing upload to 0x0.st...")
+    test_url = upload_to_0x0(test_image_path)
+    
+    if test_url:
+        print(f"✅ UPLOAD TEST SUCCESSFUL!")
+        print(f"🔗 TEST DOWNLOAD URL: {test_url}")
+        print(f"📥 Click this link to verify: {test_url}")
+        return test_url
+    else:
+        print("❌ UPLOAD TEST FAILED!")
+        return None
+
 def handler(job):
     """Main handler for complete light field optimization"""
     
     try:
         print(f"🚀 COMPLETE LIGHT FIELD OPTIMIZER STARTED: {datetime.now()}")
+        
+        # FIRST: Test upload system
+        test_upload_url = test_upload_system()
+        
+        if not test_upload_url:
+            return {
+                'status': 'error',
+                'message': 'Upload test failed - aborting optimization',
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        print(f"✅ Upload system verified - proceeding with optimization...")
         
         inp = job.get("input", {}) or {}
         
@@ -612,28 +663,34 @@ def handler(job):
         final_memory = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         max_memory = torch.cuda.max_memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         
-        # Display all download URLs clearly
-        print(f"\n" + "="*70)
-        print("📥 DOWNLOAD LINKS - CLICK TO GET YOUR RESULTS:")
-        print("="*70)
+        # Display all download URLs clearly in logs
+        print(f"\n" + "="*80)
+        print("📥 FINAL DOWNLOAD LINKS - COPY THESE URLs:")
+        print("="*80)
         
         if archive_url:
-            print(f"🎯 COMPLETE ARCHIVE: {archive_url}")
+            print(f"🎯 COMPLETE ARCHIVE (ALL RESULTS): {archive_url}")
             print(f"   Archive size: {archive_size:.1f} MB")
         
-        print(f"\n📊 INDIVIDUAL FILES:")
+        print(f"\n📊 INDIVIDUAL FILE DOWNLOADS:")
         for filename, url in all_download_urls.items():
-            print(f"   {filename}: {url}")
+            print(f"🔗 {filename}")
+            print(f"   URL: {url}")
         
-        print("="*70)
-        print(f"📊 Summary: {len(all_scene_results)} scenes, {len(all_download_urls)} files, {max_memory:.2f}GB peak GPU")
-        print("="*70)
+        print(f"\n🧪 UPLOAD TEST RESULT:")
+        print(f"   Test checkerboard: {test_upload_url}")
+        
+        print("="*80)
+        print(f"📊 SUMMARY: {len(all_scene_results)} scenes, {len(all_download_urls)} files, {max_memory:.2f}GB peak GPU")
+        print(f"📥 TOTAL DOWNLOAD LINKS: {len(all_download_urls) + (1 if archive_url else 0)}")
+        print("="*80)
         
         return {
             'status': 'success',
             'message': f'Complete optimization: ALL 7 scenes, {iterations} iterations each, {max_memory:.2f}GB peak memory',
             'DOWNLOAD_COMPLETE_ARCHIVE': archive_url,
             'DOWNLOAD_INDIVIDUAL_FILES': all_download_urls,
+            'UPLOAD_TEST_URL': test_upload_url,
             'scenes_completed': list(all_scene_results.keys()),
             'total_scenes': len(all_scene_results),
             'files_uploaded_total': len(all_download_urls),
