@@ -449,8 +449,8 @@ def optimize_spherical_checkerboard(iterations, resolution):
         
         loss_history.append(loss.item())
         
-        # Save progress frame
-        if iteration % 10 == 0:
+        # Save EVERY iteration frame
+        if True:  # Save every single iteration
             fig, axes = plt.subplots(1, 3, figsize=(12, 4))
             
             axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
@@ -487,13 +487,91 @@ def optimize_spherical_checkerboard(iterations, resolution):
     for f in progress_frames:
         os.remove(f)
     
-    # Upload results
+    # Create and upload additional outputs
+    
+    # Save final comparison image
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
+    axes[0].set_title('Target: Eye → Scene\\n(Ground Truth)')
+    axes[0].axis('off')
+    
+    with torch.no_grad():
+        final_simulated = render_eye_view_through_display(
+            torch.tensor([0.0, 0.0, 0.0], device=device), 35.0, display_system, scene, resolution
+        )
+    
+    axes[1].imshow(np.clip(final_simulated.cpu().numpy(), 0, 1))
+    axes[1].set_title(f'Simulated: Eye → Display\\nFinal Loss: {loss_history[-1]:.6f}')
+    axes[1].axis('off')
+    
+    axes[2].plot(loss_history, 'b-', linewidth=2)
+    axes[2].set_title(f'Loss Convergence\\nFinal: {loss_history[-1]:.6f}')
+    axes[2].set_xlabel('Iteration')
+    axes[2].set_ylabel('MSE Loss')
+    axes[2].set_yscale('log')
+    axes[2].grid(True, alpha=0.3)
+    
+    plt.suptitle('ACTUAL Light Field Display Optimization Results')
+    plt.tight_layout()
+    final_comparison_path = '/tmp/final_comparison.png'
+    plt.savefig(final_comparison_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # Save display images
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    for i in range(4):
+        display_img = display_system.display_images[i].detach().cpu().numpy()
+        display_img = np.transpose(display_img, (1, 2, 0))
+        axes[i].imshow(np.clip(display_img, 0, 1))
+        axes[i].set_title(f'Display FL: {display_system.focal_lengths[i]:.0f}mm')
+        axes[i].axis('off')
+    
+    plt.suptitle('Optimized Display Images - All Focal Planes')
+    plt.tight_layout()
+    displays_path = '/tmp/optimized_displays.png'
+    plt.savefig(displays_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # Upload all results
     progress_url = upload_to_catbox(progress_gif)
+    comparison_url = upload_to_catbox(final_comparison_path)
+    displays_url = upload_to_catbox(displays_path)
+    
+    # Save loss history as JSON
+    loss_json_path = '/tmp/loss_history.json'
+    with open(loss_json_path, 'w') as f:
+        json.dump({
+            'loss_history': loss_history,
+            'final_loss': loss_history[-1],
+            'iterations': iterations,
+            'resolution': resolution,
+            'optimization_type': 'actual_ray_tracing'
+        }, f, indent=2)
+    
+    loss_url = upload_to_catbox(loss_json_path)
+    os.remove(loss_json_path)
+    
+    print(f"\n" + "="*60)
+    print("📥 ALL DOWNLOAD URLS:")
+    print(f"🎬 Progress GIF ({iterations} frames): {progress_url}")
+    print(f"🖼️  Final Comparison: {comparison_url}")
+    print(f"📊 Display Images: {displays_url}")
+    print(f"📋 Loss History JSON: {loss_url}")
+    print("="*60)
     
     return {
         'final_loss': loss_history[-1],
         'loss_history': loss_history,
-        'progress_url': progress_url
+        'progress_gif_url': progress_url,
+        'final_comparison_url': comparison_url,
+        'displays_url': displays_url,
+        'loss_history_url': loss_url,
+        'all_outputs': {
+            'progress_gif': progress_url,
+            'final_comparison': comparison_url, 
+            'optimized_displays': displays_url,
+            'loss_history_json': loss_url
+        }
     }
 
 def handler(job):
@@ -523,9 +601,21 @@ def handler(job):
         return {
             'status': 'success',
             'message': f'ACTUAL optimization complete: {iterations} iterations, loss: {result["final_loss"]:.6f}',
-            'test_upload': test_url,
-            'progress_gif': result['progress_url'],
+            'test_upload_url': test_url,
+            'progress_gif_url': result['progress_gif_url'],
+            'final_comparison_url': result['final_comparison_url'],
+            'displays_url': result['displays_url'],
+            'loss_history_url': result['loss_history_url'],
             'final_loss': result['final_loss'],
+            'all_download_urls': result['all_outputs'],
+            'optimization_specs': {
+                'iterations': iterations,
+                'resolution': resolution,
+                'rays_per_pixel': 4,
+                'display_resolution': 512,
+                'focal_planes': 4,
+                'frames_in_gif': iterations
+            },
             'timestamp': datetime.now().isoformat()
         }
         
