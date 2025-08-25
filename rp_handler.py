@@ -252,30 +252,31 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, ray
     plt.savefig(eye_views_path, dpi=120, bbox_inches='tight')
     plt.close()
     
-    # UPLOAD IMMEDIATELY AFTER THIS SCENE
-    uploaded_files = []
-    if github_token:
-        print(f"📤 Uploading {scene_name} results immediately...")
-        
-        # Upload this scene's files
-        if upload_to_github(progress_gif, f"results/{timestamp}/{scene_name}_progress.gif", github_token):
-            uploaded_files.append(f"{scene_name}_progress.gif")
-        
-        if upload_to_github(displays_path, f"results/{timestamp}/{scene_name}_displays.png", github_token):
-            uploaded_files.append(f"{scene_name}_displays.png")
-        
-        if upload_to_github(eye_views_path, f"results/{timestamp}/{scene_name}_eye_views.png", github_token):
-            uploaded_files.append(f"{scene_name}_eye_views.png")
-        
-        # Upload loss history
-        loss_file = f'/tmp/{scene_name}_loss.json'
-        with open(loss_file, 'w') as f:
-            json.dump(loss_history, f)
-        if upload_to_github(loss_file, f"results/{timestamp}/{scene_name}_loss.json", github_token):
-            uploaded_files.append(f"{scene_name}_loss.json")
-        os.remove(loss_file)
-        
-        print(f"✅ {scene_name} uploaded: {len(uploaded_files)} files")
+    # UPLOAD IMMEDIATELY TO FILE.IO (no GitHub issues)
+    uploaded_urls = {}
+    print(f"📤 Uploading {scene_name} results to file.io immediately...")
+    
+    # Upload this scene's files to file.io
+    files_to_upload = [progress_gif, displays_path, eye_views_path]
+    
+    for file_path in files_to_upload:
+        if os.path.exists(file_path):
+            url = upload_to_fileio(file_path)
+            if url:
+                filename = os.path.basename(file_path)
+                uploaded_urls[filename] = url
+    
+    # Upload loss history
+    loss_file = f'/tmp/{scene_name}_loss.json'
+    with open(loss_file, 'w') as f:
+        json.dump(loss_history, f)
+    
+    loss_url = upload_to_fileio(loss_file)
+    if loss_url:
+        uploaded_urls[f'{scene_name}_loss.json'] = loss_url
+    os.remove(loss_file)
+    
+    print(f"✅ {scene_name} uploaded: {len(uploaded_urls)} files to file.io")
     
     return {
         'loss_history': loss_history,
@@ -284,7 +285,7 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, ray
         'displays_image': displays_path,
         'eye_views_image': eye_views_path,
         'num_focal_planes': len(display_system.focal_lengths),
-        'uploaded_files': uploaded_files
+        'uploaded_urls': uploaded_urls
     }
 
 def create_focal_sweep_gif(resolution):
@@ -353,101 +354,77 @@ def create_eye_movement_gif(resolution):
     print(f"✅ Eye movement GIF: 60 frames")
     return eye_gif
 
-def upload_to_github(file_path, github_path, github_token):
-    """Upload file to GitHub repository with size checking"""
+def upload_to_fileio(file_path):
+    """Upload file to file.io (14-day temporary storage)"""
     
-    file_size = os.path.getsize(file_path) / 1024**2  # Size in MB
-    print(f"📤 Uploading {github_path} ({file_size:.1f} MB)")
-    
-    # GitHub has 100MB file limit
-    if file_size > 90:
-        print(f"⚠️ File too large ({file_size:.1f} MB), skipping: {github_path}")
-        return False
-    
-    with open(file_path, 'rb') as f:
-        content = base64.b64encode(f.read()).decode()
-    
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{github_path}"
-    
-    headers = {
-        "Authorization": f"Bearer {github_token}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "message": f"Add optimization results: {github_path}",
-        "content": content
-    }
+    file_size = os.path.getsize(file_path) / 1024**2
+    print(f"📤 Uploading to file.io: {os.path.basename(file_path)} ({file_size:.1f} MB)")
     
     try:
-        response = requests.put(url, headers=headers, json=data, timeout=120)
-        if response.status_code in [200, 201]:
-            print(f"✅ Uploaded: {github_path}")
-            return True
+        with open(file_path, 'rb') as f:
+            files = {'file': f}
+            response = requests.post('https://file.io', files=files, timeout=120)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success'):
+                url = result.get('link')
+                print(f"✅ Uploaded: {url}")
+                return url
+            else:
+                print(f"❌ file.io upload failed: {result}")
+                return None
         else:
-            print(f"❌ Upload failed: {response.status_code} - {response.text}")
-            return False
+            print(f"❌ file.io upload failed: {response.status_code}")
+            return None
+            
     except Exception as e:
         print(f"❌ Upload error: {e}")
-        return False
+        return None
 
-def test_github_upload(github_token):
-    """Test GitHub upload with a small file"""
+def upload_to_0x0(file_path):
+    """Upload file to 0x0.st (temporary storage)"""
     
-    print("🧪 Testing GitHub upload...")
+    file_size = os.path.getsize(file_path) / 1024**2
+    print(f"📤 Uploading to 0x0.st: {os.path.basename(file_path)} ({file_size:.1f} MB)")
     
-    test_content = {
-        'test': 'GitHub upload test',
-        'timestamp': datetime.now().isoformat(),
-        'token_works': True
-    }
-    
-    test_file = '/tmp/test_upload.json'
-    with open(test_file, 'w') as f:
-        json.dump(test_content, f, indent=2)
-    
-    success = upload_to_github(test_file, f"test_results/upload_test_{datetime.now().strftime('%H%M%S')}.json", github_token)
-    os.remove(test_file)
-    
-    return success
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'file': f}
+            response = requests.post('https://0x0.st', files=files, timeout=120)
+        
+        if response.status_code == 200:
+            url = response.text.strip()
+            print(f"✅ Uploaded: {url}")
+            return url
+        else:
+            print(f"❌ 0x0.st upload failed: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        print(f"❌ Upload error: {e}")
+        return None
 
-def upload_all_files_individually(all_results, focal_gif, eye_gif, github_token, timestamp):
-    """Upload all files individually to avoid size limits"""
+def upload_files_to_storage(file_paths, storage_type="fileio"):
+    """Upload files to temporary storage and return URLs"""
     
-    print("📤 Uploading ALL files individually to GitHub...")
-    uploaded_files = []
+    uploaded_urls = {}
     
-    # Upload each scene's files
-    for scene_name, scene_data in all_results.items():
-        # Progress GIF
-        if upload_to_github(scene_data['progress_gif'], f"results/{timestamp}/{scene_name}_progress.gif", github_token):
-            uploaded_files.append(f"{scene_name}_progress.gif")
-        
-        # Display images
-        if upload_to_github(scene_data['displays_image'], f"results/{timestamp}/{scene_name}_displays.png", github_token):
-            uploaded_files.append(f"{scene_name}_displays.png")
-        
-        # Eye views
-        if upload_to_github(scene_data['eye_views_image'], f"results/{timestamp}/{scene_name}_eye_views.png", github_token):
-            uploaded_files.append(f"{scene_name}_eye_views.png")
-        
-        # Loss history
-        loss_file = f'/tmp/{scene_name}_loss.json'
-        with open(loss_file, 'w') as f:
-            json.dump(scene_data['loss_history'], f)
-        if upload_to_github(loss_file, f"results/{timestamp}/{scene_name}_loss.json", github_token):
-            uploaded_files.append(f"{scene_name}_loss.json")
-        os.remove(loss_file)
+    for file_path in file_paths:
+        if os.path.exists(file_path):
+            filename = os.path.basename(file_path)
+            
+            if storage_type == "fileio":
+                url = upload_to_fileio(file_path)
+            elif storage_type == "0x0":
+                url = upload_to_0x0(file_path)
+            else:
+                url = None
+            
+            if url:
+                uploaded_urls[filename] = url
     
-    # Upload global GIFs
-    if upload_to_github(focal_gif, f"results/{timestamp}/focal_sweep.gif", github_token):
-        uploaded_files.append("focal_sweep.gif")
-    
-    if upload_to_github(eye_gif, f"results/{timestamp}/eye_movement.gif", github_token):
-        uploaded_files.append("eye_movement.gif")
-    
-    print(f"✅ Uploaded {len(uploaded_files)} individual files to GitHub")
-    return uploaded_files
+    return uploaded_urls
 
 def handler(job):
     try:
@@ -455,12 +432,11 @@ def handler(job):
         
         inp = job.get("input", {}) or {}
         
-        # Parameters with GitHub token integrated
-        iterations = inp.get("iterations", 250)  # Reduced to 250
-        resolution = inp.get("resolution", 512)
+        # Parameters (no GitHub token needed)
+        iterations = inp.get("iterations", 250)
+        resolution = inp.get("resolution", 512) 
         rays_per_pixel = inp.get("rays_per_pixel", 16)
         target_memory_gb = inp.get("target_memory_gb", 25)
-        github_token = inp.get("github_token", "")  # No default token for security
         
         print(f"⚙️ Parameters: {iterations} iterations, {resolution}x{resolution}, {rays_per_pixel} rays/pixel")
         
@@ -492,16 +468,27 @@ def handler(job):
         # OPTIMIZE ALL 7 SCENES with immediate uploads
         for scene_name, scene_objects in ALL_SCENES.items():
             print(f"\n🎯 Scene {len(all_results)+1}/7: {scene_name}")
-            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, github_token, timestamp)
+            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, rays_per_pixel, "", timestamp)
             all_results[scene_name] = scene_result
             
             # Memory cleanup after each scene
             torch.cuda.empty_cache()
             print(f"✅ {scene_name} complete and uploaded")
         
-        # Create global GIFs
+        # Create global GIFs and upload immediately
+        print("\n🎬 Creating and uploading global GIFs...")
         focal_gif = create_focal_sweep_gif(resolution)
         eye_gif = create_eye_movement_gif(resolution)
+        
+        # Upload global GIFs
+        global_urls = {}
+        focal_url = upload_to_fileio(focal_gif)
+        if focal_url:
+            global_urls['focal_sweep.gif'] = focal_url
+        
+        eye_url = upload_to_fileio(eye_gif) 
+        if eye_url:
+            global_urls['eye_movement.gif'] = eye_url
         
         # Create comprehensive archive
         print("📦 Creating complete archive...")
@@ -546,34 +533,18 @@ def handler(job):
         archive_size = os.path.getsize(archive_path) / 1024**2
         print(f"📦 Complete archive: {archive_size:.1f} MB")
         
-        # Test GitHub upload first
-        github_upload_success = False
-        upload_urls = []
-        uploaded_files = []
+        # Upload final archive to file.io
+        print("📤 Uploading final archive to file.io...")
+        archive_url = upload_to_fileio(archive_path)
         
-        if github_token and github_token != "ghp_mock_token_placeholder":
-            print("📤 Testing GitHub upload...")
-            upload_test_success = test_github_upload(github_token)
-            
-            if upload_test_success:
-                print("✅ GitHub upload test successful!")
-                
-                # Upload ALL files individually 
-                uploaded_files = upload_all_files_individually(all_results, focal_gif, eye_gif, github_token, timestamp)
-                
-                # Try to upload zip if not too large
-                if archive_size < 90:
-                    zip_uploaded = upload_to_github(archive_path, f"results/{timestamp}/complete_optimization.zip", github_token)
-                    if zip_uploaded:
-                        uploaded_files.append("complete_optimization.zip")
-                        upload_urls.append(f"https://github.com/{GITHUB_REPO}/tree/master/results/{timestamp}")
-                
-                github_upload_success = len(uploaded_files) > 0
-                print(f"✅ GitHub upload complete: {len(uploaded_files)} files uploaded")
-            else:
-                print("❌ GitHub upload test failed - check token")
-        else:
-            print("⚠️ No GitHub token provided")
+        # Collect all uploaded URLs
+        all_uploaded_urls = global_urls.copy()
+        
+        # Add scene URLs
+        for scene_name, scene_data in all_results.items():
+            scene_urls = scene_data.get('uploaded_urls', {})
+            for filename, url in scene_urls.items():
+                all_uploaded_urls[f"{scene_name}_{filename}"] = url
         
         # Final memory report
         final_memory = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
@@ -588,9 +559,9 @@ def handler(job):
             'gpu_memory_peak': max_memory,
             'archive_path': archive_path,
             'archive_size_mb': archive_size,
-            'github_uploads': upload_urls,
-            'github_files_uploaded': uploaded_files,
-            'github_upload_success': github_upload_success,
+            'file_io_urls': all_uploaded_urls,
+            'archive_url': archive_url,
+            'upload_success': len(all_uploaded_urls) > 0,
             'outputs_generated': {
                 'progress_gifs': f'{len(all_results)} scenes x {iterations} frames each',
                 'focal_sweep_gif': '100 frames',
