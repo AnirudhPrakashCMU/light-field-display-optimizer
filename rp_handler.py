@@ -1,6 +1,6 @@
 """
-Enhanced RunPod Light Field Display Optimizer Handler
-Complete implementation with multi-ray sampling, comprehensive debug outputs, and memory optimization
+FINAL ENHANCED RUNPOD LIGHT FIELD OPTIMIZER - MAXIMUM SETTINGS
+Complete implementation with maximum resolution, iterations, and comprehensive outputs
 """
 
 import runpod
@@ -17,29 +17,24 @@ import json
 import math
 from datetime import datetime
 
-print("🚀 Enhanced Light Field Optimizer Handler Loading...")
+print("🚀 FINAL ENHANCED LIGHT FIELD OPTIMIZER - MAXIMUM SETTINGS")
 
-# Setup GPU with aggressive memory management
+# GPU setup
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if torch.cuda.is_available():
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
     os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
     torch.backends.cudnn.benchmark = True
-    print(f"✅ GPU initialized: {torch.cuda.get_device_name(0)}")
+    print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
     print(f"   Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-else:
-    print("⚠️ No GPU detected")
 
 class SphericalCheckerboard:
-    """MATLAB-compatible spherical checkerboard scene"""
-    
     def __init__(self, center, radius):
         self.center = center
         self.radius = radius
         
     def get_color(self, point_3d):
-        """Get checkerboard color at 3D point"""
         direction = point_3d - self.center
         direction_norm = direction / torch.norm(direction, dim=-1, keepdim=True)
         
@@ -61,44 +56,35 @@ class SphericalCheckerboard:
         return ((i_square + j_square) % 2).float()
 
 def generate_pupil_samples(num_samples, pupil_radius):
-    """Generate uniform pupil samples for multi-ray sampling"""
     angles = torch.linspace(0, 2*math.pi, num_samples, device=device)
     radii = torch.sqrt(torch.rand(num_samples, device=device)) * pupil_radius
     return torch.stack([radii * torch.cos(angles), radii * torch.sin(angles)], dim=1)
 
-class EnhancedLightFieldDisplay(nn.Module):
-    """Enhanced display system with memory optimization"""
-    
-    def __init__(self, params):
+class MaximumLightFieldDisplay(nn.Module):
+    def __init__(self, target_memory_gb):
         super().__init__()
         
-        # Calculate memory-optimized display configuration
-        target_memory_gb = params.get('target_memory_gb', 20)
-        display_resolution = params.get('display_resolution', 2048)
-        num_focal_planes = params.get('num_focal_planes', 12)
+        # MAXIMUM SETTINGS
+        display_resolution = 6144  # Maximum resolution
+        num_focal_planes = max(16, min(32, int(target_memory_gb / 4)))  # Scale with memory
         
-        print(f"🧠 Creating memory-optimized display:")
-        print(f"   Target memory: {target_memory_gb}GB")
+        print(f"🧠 MAXIMUM display system:")
         print(f"   Display resolution: {display_resolution}x{display_resolution}")
         print(f"   Focal planes: {num_focal_planes}")
+        print(f"   Target memory: {target_memory_gb}GB")
         
-        # Learnable display images
         self.display_images = nn.Parameter(
             torch.rand(num_focal_planes, 3, display_resolution, display_resolution, 
                       device=device, dtype=torch.float32) * 0.5
         )
         
-        # Fixed focal lengths
         self.focal_lengths = torch.linspace(10, 100, num_focal_planes, device=device)
         
-        # Report actual memory usage
         memory_used = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         print(f"   Actual memory used: {memory_used:.2f} GB")
 
-def generate_enhanced_target(scene, eye_focal_length, resolution, rays_per_pixel):
-    """Generate high-quality target with multi-ray sampling"""
-    
-    print(f"🎯 Generating target: {resolution}x{resolution} with {rays_per_pixel} rays/pixel")
+def generate_maximum_target(scene, eye_focal_length, resolution, rays_per_pixel):
+    print(f"🎯 Generating MAXIMUM target: {resolution}x{resolution} with {rays_per_pixel} rays/pixel")
     
     retina_size = 10.0
     retina_distance = 24.0
@@ -115,11 +101,11 @@ def generate_enhanced_target(scene, eye_focal_length, resolution, rays_per_pixel
     N = retina_points.shape[0]
     M = rays_per_pixel
     
-    # Process in batches
-    batch_size = min(4096, N)
+    # Large batch processing for memory usage
+    batch_size = min(16384, N)  # Large batches
     final_colors = torch.zeros(N, 3, device=device)
     
-    pupil_radius = 2.0  # mm
+    pupil_radius = 2.0
     pupil_samples = generate_pupil_samples(M, pupil_radius)
     
     for batch_start in range(0, N, batch_size):
@@ -185,10 +171,8 @@ def generate_enhanced_target(scene, eye_focal_length, resolution, rays_per_pixel
     
     return final_colors.reshape(resolution, resolution, 3)
 
-def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_memory_gb):
-    """Run the complete enhanced light field optimization"""
-    
-    print(f"🚀 Starting Enhanced Light Field Optimization")
+def run_final_optimization(iterations, resolution, rays_per_pixel, target_memory_gb):
+    print(f"🚀 FINAL MAXIMUM OPTIMIZATION")
     print(f"   Iterations: {iterations}")
     print(f"   Resolution: {resolution}x{resolution}")
     print(f"   Rays per pixel: {rays_per_pixel}")
@@ -200,31 +184,25 @@ def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_mem
         radius=50.0
     )
     
-    # Enhanced display system
-    display_params = {
-        'target_memory_gb': target_memory_gb,
-        'display_resolution': min(4096, resolution * 2),  # Scale with input resolution
-        'num_focal_planes': max(8, min(20, int(target_memory_gb / 3)))  # Scale with memory
-    }
+    # Maximum display system
+    display_system = MaximumLightFieldDisplay(target_memory_gb)
     
-    display_system = EnhancedLightFieldDisplay(display_params)
-    
-    # Optimizer with enhanced settings
+    # Optimizer
     optimizer = optim.AdamW(display_system.parameters(), lr=0.03, weight_decay=1e-4)
     scaler = torch.cuda.amp.GradScaler() if torch.cuda.is_available() else None
     
-    # Generate target image
-    print("🎯 Generating enhanced target image...")
+    # Generate target
+    print("🎯 Generating MAXIMUM target...")
     with torch.no_grad():
-        target_image = generate_enhanced_target(scene, 35.0, resolution, rays_per_pixel)
+        target_image = generate_maximum_target(scene, 35.0, resolution, rays_per_pixel)
     
     print(f"✅ Target generated: {target_image.shape}")
     
-    # Training with comprehensive tracking
+    # Training with ALL iterations tracked
     loss_history = []
     iteration_images = []
     
-    print(f"🔥 Starting enhanced training...")
+    print(f"🔥 Starting MAXIMUM training - ALL {iterations} iterations tracked...")
     
     for iteration in range(iterations):
         optimizer.zero_grad()
@@ -236,7 +214,6 @@ def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_mem
                 size=(resolution, resolution), mode='bilinear', align_corners=False
             ).squeeze(0).permute(1, 2, 0)
             
-            # Compute loss
             loss = torch.mean((simulated_image - target_image) ** 2)
         
         # Backward pass
@@ -250,42 +227,38 @@ def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_mem
             torch.nn.utils.clip_grad_norm_(display_system.parameters(), max_norm=1.0)
             optimizer.step()
         
-        # Clamp values
         with torch.no_grad():
             display_system.display_images.clamp_(0, 1)
         
         loss_history.append(loss.item())
         
-        # Save every 20th iteration for progress GIF
-        if iteration % 20 == 0:
-            # Create progress frame
-            fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-            
-            axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
-            axes[0].set_title(f'Target\nIteration {iteration}')
-            axes[0].axis('off')
-            
-            axes[1].imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
-            axes[1].set_title(f'Optimized\nLoss: {loss.item():.6f}')
-            axes[1].axis('off')
-            
-            axes[2].plot(loss_history, 'b-', linewidth=2)
-            axes[2].set_title(f'Loss: {loss.item():.6f}')
-            axes[2].set_yscale('log')
-            axes[2].grid(True, alpha=0.3)
-            
-            plt.suptitle(f'Training Progress - Iteration {iteration}/{iterations}')
-            plt.tight_layout()
-            
-            # Save as PIL Image
-            temp_path = f'/tmp/progress_frame_{iteration:04d}.png'
-            plt.savefig(temp_path, dpi=100, bbox_inches='tight')
-            plt.close()
-            
-            iteration_images.append(temp_path)
+        # Save EVERY iteration
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        
+        axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
+        axes[0].set_title(f'Target\\nIteration {iteration}')
+        axes[0].axis('off')
+        
+        axes[1].imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
+        axes[1].set_title(f'Optimized\\nLoss: {loss.item():.6f}')
+        axes[1].axis('off')
+        
+        axes[2].plot(loss_history, 'b-', linewidth=2)
+        axes[2].set_title(f'Loss: {loss.item():.6f}')
+        axes[2].set_yscale('log')
+        axes[2].grid(True, alpha=0.3)
+        
+        plt.suptitle(f'Training Progress - Iteration {iteration}/{iterations}')
+        plt.tight_layout()
+        
+        temp_path = f'/tmp/progress_frame_{iteration:04d}.png'
+        plt.savefig(temp_path, dpi=100, bbox_inches='tight')
+        plt.close()
+        
+        iteration_images.append(temp_path)
         
         # Progress reporting
-        if iteration % 50 == 0:
+        if iteration % 25 == 0:
             memory_used = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
             print(f"   Iter {iteration}: Loss = {loss.item():.6f}, GPU = {memory_used:.2f} GB")
         
@@ -293,41 +266,39 @@ def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_mem
         if iteration % 100 == 0:
             torch.cuda.empty_cache()
     
-    # Create progress GIF
-    print("🎬 Creating training progress GIF...")
+    # Create ALL GIFs with ALL frames
+    print("🎬 Creating COMPLETE GIFs with ALL frames...")
+    
+    # 1. Training progress GIF - ALL iterations
     if iteration_images:
         gif_images = [Image.open(img_path) for img_path in iteration_images]
-        progress_gif_path = '/tmp/training_progress.gif'
+        progress_gif_path = '/tmp/training_progress_complete.gif'
         gif_images[0].save(progress_gif_path, save_all=True, append_images=gif_images[1:], 
-                          duration=300, loop=0, optimize=True)
+                          duration=100, loop=0, optimize=True)
         
-        # Clean up frames
         for img_path in iteration_images:
-            if os.path.exists(img_path):
-                os.remove(img_path)
+            os.remove(img_path)
         
-        print(f"✅ Progress GIF created: {len(gif_images)} frames")
+        print(f"✅ Complete progress GIF: {len(gif_images)} frames (ALL iterations)")
     
-    # Create focal length sweep GIF
-    print("🎬 Creating focal length sweep GIF...")
+    # 2. Focal length sweep - 100 frames
     focal_frames = []
-    focal_lengths_test = torch.linspace(20.0, 60.0, 20, device=device)
+    focal_lengths_test = torch.linspace(15.0, 65.0, 100, device=device)
     
     for i, fl in enumerate(focal_lengths_test):
         with torch.no_grad():
-            target_fl = generate_enhanced_target(scene, fl.item(), 384, rays_per_pixel//2)
+            target_fl = generate_maximum_target(scene, fl.item(), 512, rays_per_pixel//2)
         
         plt.figure(figsize=(10, 8))
         
         plt.subplot(2, 1, 1)
         plt.imshow(np.clip(target_fl.cpu().numpy(), 0, 1))
-        plt.title(f'Spherical Checkerboard - Eye FL: {fl:.1f}mm\n{rays_per_pixel}-Ray Multi-Ray Sampling')
+        plt.title(f'Spherical Checkerboard - Eye FL: {fl:.1f}mm\\n{rays_per_pixel}-Ray Multi-Ray Sampling')
         plt.axis('off')
         
         plt.subplot(2, 1, 2)
         plt.axis('off')
         
-        # Focus calculation
         focused_distance = (fl.item() * 24.0) / (fl.item() - 24.0)
         defocus = abs(200.0 - focused_distance)
         
@@ -341,44 +312,40 @@ def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_mem
         plt.xlim(0, 1)
         plt.ylim(0, 1)
         
-        plt.suptitle(f'Focal Length Sweep - Frame {i+1}/20')
+        plt.suptitle(f'Focal Length Sweep - Frame {i+1}/100')
         plt.tight_layout()
         
-        frame_path = f'/tmp/focal_frame_{i:03d}.png'
+        frame_path = f'/tmp/focal_frame_{i:04d}.png'
         plt.savefig(frame_path, dpi=120, bbox_inches='tight')
         focal_frames.append(frame_path)
         plt.close()
     
-    # Create focal sweep GIF
     focal_images = [Image.open(f) for f in focal_frames]
-    focal_gif_path = '/tmp/focal_length_sweep.gif'
+    focal_gif_path = '/tmp/focal_length_sweep_complete.gif'
     focal_images[0].save(focal_gif_path, save_all=True, append_images=focal_images[1:],
-                        duration=400, loop=0, optimize=True)
+                        duration=200, loop=0, optimize=True)
     
-    # Clean up focal frames
     for f in focal_frames:
         os.remove(f)
     
-    print(f"✅ Focal sweep GIF created")
+    print(f"✅ Complete focal sweep GIF: 100 frames")
     
-    # Create eye movement GIF
-    print("🎬 Creating eye movement GIF...")
+    # 3. Eye movement - 60 frames
     eye_frames = []
-    eye_positions = torch.linspace(-15, 15, 15, device=device)
+    eye_positions = torch.linspace(-20, 20, 60, device=device)
     
     for i, eye_x in enumerate(eye_positions):
         with torch.no_grad():
-            target_eye = generate_enhanced_target(scene, 35.0, 384, rays_per_pixel//2)
+            target_eye = generate_maximum_target(scene, 35.0, 512, rays_per_pixel//2)
         
         plt.figure(figsize=(12, 6))
         
         plt.subplot(1, 2, 1)
         plt.imshow(np.clip(target_eye.cpu().numpy(), 0, 1))
-        plt.title(f'Eye View from X: {eye_x:.1f}mm\nSpherical Checkerboard')
+        plt.title(f'Eye View from X: {eye_x:.1f}mm\\nSpherical Checkerboard')
         plt.axis('off')
         
         plt.subplot(1, 2, 2)
-        # Scene diagram
         pos = scene.center.cpu().numpy()
         circle = plt.Circle((pos[2], pos[0]), scene.radius, fill=False, color='blue', linewidth=3)
         plt.gca().add_patch(circle)
@@ -390,80 +357,32 @@ def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_mem
         plt.title('Eye Movement')
         plt.grid(True, alpha=0.3)
         plt.legend()
-        plt.xlim(-20, 250)
-        plt.ylim(-20, 20)
+        plt.xlim(-30, 250)
+        plt.ylim(-25, 25)
         
-        plt.suptitle(f'Eye Movement - Frame {i+1}/15')
+        plt.suptitle(f'Eye Movement - Frame {i+1}/60')
         plt.tight_layout()
         
-        frame_path = f'/tmp/eye_frame_{i:03d}.png'
+        frame_path = f'/tmp/eye_frame_{i:04d}.png'
         plt.savefig(frame_path, dpi=120, bbox_inches='tight')
         eye_frames.append(frame_path)
         plt.close()
     
-    # Create eye movement GIF
     eye_images = [Image.open(f) for f in eye_frames]
-    eye_gif_path = '/tmp/eye_movement_sweep.gif'
+    eye_gif_path = '/tmp/eye_movement_sweep_complete.gif'
     eye_images[0].save(eye_gif_path, save_all=True, append_images=eye_images[1:],
-                      duration=250, loop=0, optimize=True)
+                      duration=150, loop=0, optimize=True)
     
-    # Clean up eye frames
     for f in eye_frames:
         os.remove(f)
     
-    print(f"✅ Eye movement GIF created")
+    print(f"✅ Complete eye movement GIF: 60 frames")
     
-    # Save final results
-    print("📊 Saving comprehensive results...")
-    
-    # Final comparison
-    plt.figure(figsize=(20, 10))
-    
-    # Main comparison
-    plt.subplot(2, 4, 1)
-    plt.imshow(np.clip(target_image.cpu().numpy(), 0, 1))
-    plt.title(f'Target: Spherical Checkerboard\n{rays_per_pixel}-Ray Multi-Sampling')
-    plt.axis('off')
-    
-    plt.subplot(2, 4, 2)
-    plt.imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
-    plt.title(f'Final Optimized Output\nLoss: {loss_history[-1]:.6f}')
-    plt.axis('off')
-    
-    plt.subplot(2, 4, 3)
-    diff_img = torch.abs(simulated_image - target_image)
-    plt.imshow(np.clip(diff_img.detach().cpu().numpy(), 0, 1))
-    plt.title('Difference Image')
-    plt.axis('off')
-    
-    plt.subplot(2, 4, 4)
-    plt.plot(loss_history, 'b-', linewidth=2)
-    plt.title(f'Complete Loss Curve\nFinal: {loss_history[-1]:.6f}')
-    plt.xlabel('Iteration')
-    plt.ylabel('Loss')
-    plt.yscale('log')
-    plt.grid(True, alpha=0.3)
-    
-    # Show focal plane displays
-    for i in range(min(4, len(display_system.focal_lengths))):
-        plt.subplot(2, 4, 5 + i)
-        display_img = display_system.display_images[i].detach().cpu().numpy()
-        display_img = np.transpose(display_img, (1, 2, 0))
-        plt.imshow(np.clip(display_img, 0, 1))
-        plt.title(f'FL: {display_system.focal_lengths[i]:.0f}mm')
-        plt.axis('off')
-    
-    plt.suptitle('Enhanced Light Field Optimization - Complete Results')
-    plt.tight_layout()
-    results_path = '/tmp/complete_results.png'
-    plt.savefig(results_path, dpi=200, bbox_inches='tight')
-    plt.close()
-    
-    # Final memory report
+    # Final results
     final_memory = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
     max_memory = torch.cuda.max_memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
     
-    print(f"🎉 Enhanced optimization complete!")
+    print(f"🎉 MAXIMUM optimization complete!")
     print(f"   Final loss: {loss_history[-1]:.6f}")
     print(f"   Peak GPU memory: {max_memory:.2f} GB")
     
@@ -477,34 +396,27 @@ def run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_mem
         'gpu_memory_peak': max_memory,
         'target_memory_gb': target_memory_gb,
         'num_focal_planes': len(display_system.focal_lengths),
-        'display_resolution': display_params['display_resolution'],
+        'display_resolution': 6144,
         'gifs_created': {
-            'training_progress': '/tmp/training_progress.gif',
-            'focal_length_sweep': '/tmp/focal_length_sweep.gif', 
-            'eye_movement_sweep': '/tmp/eye_movement_sweep.gif'
-        },
-        'final_results_image': results_path
+            'training_progress_complete': progress_gif_path,
+            'focal_length_sweep_complete': focal_gif_path,
+            'eye_movement_sweep_complete': eye_gif_path
+        }
     }
 
 def handler(job):
-    """Enhanced RunPod handler with complete light field optimization"""
-    
     try:
-        print(f"🚀 Enhanced Handler Started: {datetime.now()}")
+        print(f"🚀 FINAL ENHANCED HANDLER: {datetime.now()}")
         
         inp = job.get("input", {}) or {}
-        print(f"📋 Input: {json.dumps(inp, indent=2)}")
         
-        # Enhanced parameters
-        task_type = inp.get("task_type", "full_optimization")
-        iterations = inp.get("iterations", 200)
-        resolution = inp.get("resolution", 512)
-        rays_per_pixel = inp.get("rays_per_pixel", 24)
-        target_memory_gb = inp.get("target_memory_gb", 30)
-        save_large_outputs = inp.get("save_large_outputs", True)
+        # MAXIMUM DEFAULTS
+        iterations = inp.get("iterations", 1000)  # MAXIMUM iterations
+        resolution = inp.get("resolution", 2048)  # MAXIMUM resolution
+        rays_per_pixel = inp.get("rays_per_pixel", 64)  # MAXIMUM rays
+        target_memory_gb = inp.get("target_memory_gb", 70)  # MAXIMUM memory
         
-        print(f"⚙️ Enhanced Parameters:")
-        print(f"   Task: {task_type}")
+        print(f"⚙️ MAXIMUM Parameters:")
         print(f"   Iterations: {iterations}")
         print(f"   Resolution: {resolution}x{resolution}")
         print(f"   Rays per pixel: {rays_per_pixel}")
@@ -515,64 +427,60 @@ def handler(job):
         if torch.cuda.is_available():
             gpu_info = {
                 'gpu_name': torch.cuda.get_device_name(0),
-                'gpu_memory_total': torch.cuda.get_device_properties(0).total_memory / 1e9,
-                'gpu_memory_available': (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / 1e9
+                'gpu_memory_total': torch.cuda.get_device_properties(0).total_memory / 1e9
             }
-            print(f"🖥️ GPU: {gpu_info['gpu_name']} ({gpu_info['gpu_memory_total']:.1f}GB total)")
+            print(f"🖥️ GPU: {gpu_info['gpu_name']} ({gpu_info['gpu_memory_total']:.1f}GB)")
         
-        # Run enhanced optimization
-        results = run_enhanced_optimization(iterations, resolution, rays_per_pixel, target_memory_gb)
+        # Run MAXIMUM optimization
+        results = run_final_optimization(iterations, resolution, rays_per_pixel, target_memory_gb)
         
-        # Create comprehensive archive
-        if save_large_outputs:
-            print("📦 Creating comprehensive archive...")
-            archive_path = f'/tmp/enhanced_optimization_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        # Create comprehensive archive with DOWNLOAD
+        print("📦 Creating FINAL archive...")
+        archive_path = f'/tmp/FINAL_optimization_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        
+        with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for key, path in results.get('gifs_created', {}).items():
+                if os.path.exists(path):
+                    zipf.write(path, f'{key}.gif')
             
-            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                # Add all result files
-                for key, path in results.get('gifs_created', {}).items():
-                    if os.path.exists(path):
-                        zipf.write(path, f'{key}.gif')
-                
-                if os.path.exists(results.get('final_results_image', '')):
-                    zipf.write(results['final_results_image'], 'complete_results.png')
-                
-                # Add loss history as JSON
-                loss_json_path = '/tmp/loss_history.json'
-                with open(loss_json_path, 'w') as f:
-                    json.dump(results['loss_history'], f)
-                zipf.write(loss_json_path, 'loss_history.json')
-            
-            archive_size = os.path.getsize(archive_path) / 1024**2
-            print(f"📦 Archive created: {archive_size:.1f} MB")
-            results['archive_path'] = archive_path
-            results['archive_size_mb'] = archive_size
+            # Add loss history
+            loss_json_path = '/tmp/loss_history_final.json'
+            with open(loss_json_path, 'w') as f:
+                json.dump(results['loss_history'], f)
+            zipf.write(loss_json_path, 'loss_history_complete.json')
+        
+        archive_size = os.path.getsize(archive_path) / 1024**2
+        
+        # DOWNLOAD PREPARATION
+        download_path = f'/workspace/FINAL_RESULTS_{datetime.now().strftime("%Y%m%d_%H%M%S")}.zip'
+        shutil.copy2(archive_path, download_path)
+        
+        results['archive_path'] = archive_path
+        results['download_path'] = download_path
+        results['archive_size_mb'] = archive_size
+        
+        print(f"📥 FINAL RESULTS READY FOR DOWNLOAD: {download_path}")
+        print(f"📦 Archive size: {archive_size:.1f} MB")
         
         return {
             'status': 'success',
-            'message': f'Enhanced optimization complete: {iterations} iterations, {rays_per_pixel} rays/pixel, {results["gpu_memory_peak"]:.2f}GB peak memory',
+            'message': f'FINAL MAXIMUM optimization complete: {iterations} iterations, {rays_per_pixel} rays/pixel, {results["gpu_memory_peak"]:.2f}GB peak',
             'results': results,
             'gpu_info': gpu_info,
-            'timestamp': datetime.now().isoformat(),
-            'handler_version': 'enhanced_v2.0'
+            'download_ready': True,
+            'download_path': download_path,
+            'timestamp': datetime.now().isoformat()
         }
         
     except Exception as e:
         import traceback
-        error_details = traceback.format_exc()
-        
-        print(f"💥 Handler Error: {str(e)}")
-        print(f"📋 Traceback: {error_details}")
-        
         return {
             'status': 'error',
-            'message': f'Enhanced optimization failed: {str(e)}',
-            'error_details': error_details,
-            'timestamp': datetime.now().isoformat(),
-            'handler_version': 'enhanced_v2.0'
+            'message': f'FINAL optimization failed: {str(e)}',
+            'error_details': traceback.format_exc(),
+            'timestamp': datetime.now().isoformat()
         }
 
-print("✅ Enhanced Light Field Optimizer Handler Ready")
+print("✅ FINAL ENHANCED OPTIMIZER READY")
 
-# Start RunPod serverless worker
 runpod.serverless.start({"handler": handler})
