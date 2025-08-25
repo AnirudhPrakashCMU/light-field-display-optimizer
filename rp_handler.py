@@ -487,9 +487,10 @@ def optimize_spherical_checkerboard(iterations, resolution):
     for f in progress_frames:
         os.remove(f)
     
-    # Create and upload additional outputs
+    # Create ALL comprehensive outputs
+    print("📊 Creating comprehensive outputs...")
     
-    # Save final comparison image
+    # 1. Final comparison image
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
     axes[0].set_title('Target: Eye → Scene\\n(Ground Truth)')
@@ -517,7 +518,7 @@ def optimize_spherical_checkerboard(iterations, resolution):
     plt.savefig(final_comparison_path, dpi=150, bbox_inches='tight')
     plt.close()
     
-    # Save display images
+    # 2. Display images (what each display shows)
     fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     for i in range(4):
         display_img = display_system.display_images[i].detach().cpu().numpy()
@@ -526,16 +527,167 @@ def optimize_spherical_checkerboard(iterations, resolution):
         axes[i].set_title(f'Display FL: {display_system.focal_lengths[i]:.0f}mm')
         axes[i].axis('off')
     
-    plt.suptitle('Optimized Display Images - All Focal Planes')
+    plt.suptitle('What Each Display Shows - All Focal Planes')
     plt.tight_layout()
     displays_path = '/tmp/optimized_displays.png'
     plt.savefig(displays_path, dpi=150, bbox_inches='tight')
     plt.close()
     
+    # 3. Eye views (what eye sees for each display)
+    print("👁️ Creating eye views for each display...")
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    for i in range(4):
+        with torch.no_grad():
+            # What eye sees when looking at this specific display
+            eye_view = torch.nn.functional.interpolate(
+                display_system.display_images[i].unsqueeze(0), 
+                size=(resolution, resolution), mode='bilinear'
+            ).squeeze(0).permute(1, 2, 0)
+        
+        axes[i].imshow(np.clip(eye_view.cpu().numpy(), 0, 1))
+        axes[i].set_title(f'Eye View FL: {display_system.focal_lengths[i]:.0f}mm')
+        axes[i].axis('off')
+    
+    plt.suptitle('What Eye Sees for Each Display')
+    plt.tight_layout()
+    eye_views_path = '/tmp/eye_views_all_displays.png'
+    plt.savefig(eye_views_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # 4. Focal length sweep GIF
+    print("🎬 Creating focal length sweep GIF...")
+    focal_frames = []
+    focal_lengths_test = torch.linspace(20.0, 50.0, 30, device=device)
+    
+    for i, fl in enumerate(focal_lengths_test):
+        with torch.no_grad():
+            target_fl = render_eye_view_target(
+                torch.tensor([0.0, 0.0, 0.0], device=device), fl.item(), scene, resolution
+            )
+        
+        plt.figure(figsize=(10, 8))
+        
+        plt.subplot(2, 1, 1)
+        plt.imshow(np.clip(target_fl.cpu().numpy(), 0, 1))
+        plt.title(f'Spherical Checkerboard - Eye FL: {fl:.1f}mm\\n4-Ray Multi-Ray Sampling')
+        plt.axis('off')
+        
+        plt.subplot(2, 1, 2)
+        plt.axis('off')
+        
+        # Focus calculation
+        focused_distance = (fl.item() * 24.0) / (fl.item() - 24.0)
+        defocus = abs(200.0 - focused_distance)
+        
+        if defocus < 15:
+            status, color = "SHARP FOCUS", 'green'
+        elif defocus < 35:
+            status, color = "MODERATE BLUR", 'orange'
+        else:
+            status, color = "HEAVY BLUR", 'red'
+        
+        plt.text(0.5, 0.8, f'Eye Focal Length: {fl:.1f}mm', ha='center', fontsize=16, fontweight='bold')
+        plt.text(0.5, 0.6, f'Focus Distance: {focused_distance:.0f}mm', ha='center', fontsize=14)
+        plt.text(0.5, 0.4, f'Sphere Distance: 200mm', ha='center', fontsize=14)
+        plt.text(0.5, 0.2, status, ha='center', fontsize=14, color=color, fontweight='bold')
+        plt.xlim(0, 1)
+        plt.ylim(0, 1)
+        
+        plt.suptitle(f'Focal Length Sweep - Frame {i+1}/30')
+        plt.tight_layout()
+        
+        frame_path = f'/tmp/focal_frame_{i:03d}.png'
+        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
+        plt.close()
+        focal_frames.append(frame_path)
+    
+    # Create focal sweep GIF
+    focal_images = [Image.open(f) for f in focal_frames]
+    focal_sweep_path = '/tmp/focal_length_sweep.gif'
+    focal_images[0].save(focal_sweep_path, save_all=True, append_images=focal_images[1:],
+                        duration=200, loop=0, optimize=True)
+    
+    for f in focal_frames:
+        os.remove(f)
+    
+    print(f"✅ Focal sweep GIF: 30 frames")
+    
+    # 5. Eye movement sweep GIF
+    print("🎬 Creating eye movement sweep GIF...")
+    eye_frames = []
+    eye_positions = torch.linspace(-10, 10, 20, device=device)
+    
+    for i, eye_x in enumerate(eye_positions):
+        with torch.no_grad():
+            eye_pos = torch.tensor([eye_x.item(), 0.0, 0.0], device=device)
+            target_eye = render_eye_view_target(eye_pos, 35.0, scene, resolution)
+        
+        plt.figure(figsize=(12, 6))
+        
+        plt.subplot(1, 2, 1)
+        plt.imshow(np.clip(target_eye.cpu().numpy(), 0, 1))
+        plt.title(f'Eye View from X: {eye_x:.1f}mm\\nSpherical Checkerboard')
+        plt.axis('off')
+        
+        plt.subplot(1, 2, 2)
+        # Scene diagram
+        pos = scene.center.cpu().numpy()
+        circle = plt.Circle((pos[2], pos[0]), scene.radius, fill=False, color='blue', linewidth=3)
+        plt.gca().add_patch(circle)
+        plt.scatter(pos[2], pos[0], c='blue', s=200, marker='o')
+        plt.scatter(0, eye_x.item(), c='red', s=150, marker='^', label='Eye')
+        plt.plot([0, pos[2]], [eye_x.item(), pos[0]], 'r--', alpha=0.5)
+        
+        plt.xlabel('Distance (mm)')
+        plt.ylabel('X Position (mm)')
+        plt.title('Eye Movement')
+        plt.grid(True, alpha=0.3)
+        plt.legend()
+        plt.xlim(-15, 250)
+        plt.ylim(-15, 15)
+        
+        plt.suptitle(f'Eye Movement Sweep - Frame {i+1}/20')
+        plt.tight_layout()
+        
+        frame_path = f'/tmp/eye_frame_{i:03d}.png'
+        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
+        plt.close()
+        eye_frames.append(frame_path)
+    
+    # Create eye movement GIF
+    eye_images = [Image.open(f) for f in eye_frames]
+    eye_movement_path = '/tmp/eye_movement_sweep.gif'
+    eye_images[0].save(eye_movement_path, save_all=True, append_images=eye_images[1:],
+                      duration=150, loop=0, optimize=True)
+    
+    for f in eye_frames:
+        os.remove(f)
+    
+    print(f"✅ Eye movement GIF: 20 frames")
+    
     # Upload all results
     progress_url = upload_to_catbox(progress_gif)
     comparison_url = upload_to_catbox(final_comparison_path)
     displays_url = upload_to_catbox(displays_path)
+    eye_views_url = upload_to_catbox(eye_views_path)
+    focal_sweep_url = upload_to_catbox(focal_sweep_path)
+    eye_movement_url = upload_to_catbox(eye_movement_path)
+    
+    # Save comprehensive focal length data
+    focal_data_path = '/tmp/focal_length_data.json'
+    with open(focal_data_path, 'w') as f:
+        json.dump({
+            'display_focal_lengths': display_system.focal_lengths.cpu().tolist(),
+            'focal_length_sweep_range': [20.0, 50.0],
+            'eye_movement_range': [-10.0, 10.0],
+            'optimization_specs': {
+                'iterations': iterations,
+                'resolution': resolution,
+                'rays_per_pixel': 4,
+                'display_resolution': 512,
+                'focal_planes': 4
+            }
+        }, f, indent=2)
     
     # Save loss history as JSON
     loss_json_path = '/tmp/loss_history.json'
@@ -549,15 +701,21 @@ def optimize_spherical_checkerboard(iterations, resolution):
         }, f, indent=2)
     
     loss_url = upload_to_catbox(loss_json_path)
+    focal_data_url = upload_to_catbox(focal_data_path)
     os.remove(loss_json_path)
+    os.remove(focal_data_path)
     
-    print(f"\n" + "="*60)
-    print("📥 ALL DOWNLOAD URLS:")
+    print(f"\n" + "="*80)
+    print("📥 ALL DOWNLOAD URLS - COMPLETE OUTPUTS:")
     print(f"🎬 Progress GIF ({iterations} frames): {progress_url}")
     print(f"🖼️  Final Comparison: {comparison_url}")
-    print(f"📊 Display Images: {displays_url}")
+    print(f"📊 What Each Display Shows: {displays_url}")
+    print(f"👁️  What Eye Sees for Each Display: {eye_views_url}")
+    print(f"🎯 Focal Length Sweep GIF (30 frames): {focal_sweep_url}")
+    print(f"🚶 Eye Movement Sweep GIF (20 frames): {eye_movement_url}")
     print(f"📋 Loss History JSON: {loss_url}")
-    print("="*60)
+    print(f"⚙️  Focal Length Data JSON: {focal_data_url}")
+    print("="*80)
     
     return {
         'final_loss': loss_history[-1],
@@ -565,13 +723,22 @@ def optimize_spherical_checkerboard(iterations, resolution):
         'progress_gif_url': progress_url,
         'final_comparison_url': comparison_url,
         'displays_url': displays_url,
+        'eye_views_url': eye_views_url,
+        'focal_sweep_url': focal_sweep_url,
+        'eye_movement_url': eye_movement_url,
         'loss_history_url': loss_url,
+        'focal_data_url': focal_data_url,
         'all_outputs': {
             'progress_gif': progress_url,
-            'final_comparison': comparison_url, 
-            'optimized_displays': displays_url,
-            'loss_history_json': loss_url
-        }
+            'final_comparison': comparison_url,
+            'what_displays_show': displays_url,
+            'what_eye_sees': eye_views_url,
+            'focal_length_sweep': focal_sweep_url,
+            'eye_movement_sweep': eye_movement_url,
+            'loss_history_json': loss_url,
+            'focal_data_json': focal_data_url
+        },
+        'focal_lengths_mm': display_system.focal_lengths.cpu().tolist()
     }
 
 def handler(job):
@@ -605,16 +772,23 @@ def handler(job):
             'progress_gif_url': result['progress_gif_url'],
             'final_comparison_url': result['final_comparison_url'],
             'displays_url': result['displays_url'],
+            'eye_views_url': result['eye_views_url'],
+            'focal_sweep_url': result['focal_sweep_url'],
+            'eye_movement_url': result['eye_movement_url'],
             'loss_history_url': result['loss_history_url'],
+            'focal_data_url': result['focal_data_url'],
             'final_loss': result['final_loss'],
             'all_download_urls': result['all_outputs'],
+            'display_focal_lengths_mm': result['focal_lengths_mm'],
             'optimization_specs': {
                 'iterations': iterations,
                 'resolution': resolution,
                 'rays_per_pixel': 4,
                 'display_resolution': 512,
                 'focal_planes': 4,
-                'frames_in_gif': iterations
+                'frames_in_progress_gif': iterations,
+                'frames_in_focal_sweep': 30,
+                'frames_in_eye_movement': 20
             },
             'timestamp': datetime.now().isoformat()
         }
