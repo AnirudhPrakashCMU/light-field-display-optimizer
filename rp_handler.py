@@ -103,7 +103,7 @@ def render_eye_view_target(eye_position, eye_focal_length, scene, resolution=512
     pupil_diameter = 4.0  # mm
     retina_distance = 24.0  # mm
     retina_size = 8.0  # mm
-    samples_per_pixel = 8
+    samples_per_pixel = 4  # Reduced for speed
     
     # Calculate eye orientation (tilted to point at sphere center)
     eye_to_sphere = scene.center - eye_position
@@ -215,7 +215,7 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
     pupil_diameter = 4.0  # mm
     retina_distance = 24.0  # mm
     retina_size = 8.0  # mm
-    samples_per_pixel = 8
+    samples_per_pixel = 4  # Reduced for speed
     
     # Tunable lens parameters
     tunable_lens_distance = 50.0  # mm from eye
@@ -249,8 +249,8 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
     pupil_radius = pupil_diameter / 2
     pupil_samples = generate_pupil_samples(M, pupil_radius)
     
-    # Process in batches
-    batch_size = min(1024, N)
+    # Process in smaller batches for speed
+    batch_size = min(256, N)  # Smaller batches for faster execution
     final_colors = torch.zeros(N, 3, device=device)
     
     for batch_start in range(0, N, batch_size):
@@ -409,7 +409,7 @@ def optimize_spherical_checkerboard(iterations, resolution):
     )
     
     # Create display system
-    display_system = LightFieldDisplay(resolution=1024, num_planes=8)
+    display_system = LightFieldDisplay(resolution=512, num_planes=4)  # Reduced for speed
     optimizer = optim.AdamW(display_system.parameters(), lr=0.02)
     
     # Eye setup
@@ -501,8 +501,8 @@ def handler(job):
         print(f"🚀 ACTUAL LIGHT FIELD OPTIMIZER: {datetime.now()}")
         
         inp = job.get("input", {})
-        iterations = inp.get("iterations", 100)
-        resolution = inp.get("resolution", 256)
+        iterations = inp.get("iterations", 50)  # Reduced for speed
+        resolution = inp.get("resolution", 128)  # Reduced for speed
         
         print(f"⚙️ REAL Parameters: {iterations} iterations, {resolution}x{resolution}")
         
