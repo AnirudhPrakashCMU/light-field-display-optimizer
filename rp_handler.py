@@ -189,19 +189,19 @@ def generate_target_for_scene(scene_objects, resolution):
         
         # Add colored regions for each object
         for obj in scene_objects:
-            color = torch.tensor(obj['color'], device=device)
+            color = torch.tensor(obj['color'], device=device, dtype=torch.float32)
             # Simple circular region
             y_coords = torch.linspace(-1, 1, resolution, device=device)
             x_coords = torch.linspace(-1, 1, resolution, device=device)
             y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
             
             # Create circle for this object
-            center_x = (obj['position'][0] / 100.0)  # Normalize position
-            center_y = (obj['position'][1] / 100.0)
-            radius = obj['size'] / 200.0  # Normalize size
+            center_x = float(obj['position'][0] / 100.0)  # Normalize position
+            center_y = float(obj['position'][1] / 100.0)
+            radius = float(obj['size'] / 200.0)  # Normalize size
             
             mask = ((x_grid - center_x)**2 + (y_grid - center_y)**2) < radius**2
-            target[mask] = color
+            target[mask] = color.unsqueeze(0).unsqueeze(0)
         
         return target
 
