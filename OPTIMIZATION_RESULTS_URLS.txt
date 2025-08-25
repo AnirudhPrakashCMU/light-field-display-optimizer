@@ -1,0 +1,96 @@
+========================================
+LIGHT FIELD DISPLAY OPTIMIZER RESULTS
+========================================
+Generated: 2025-08-25
+Total Scenes: 7
+Total Files: 28
+All uploads successful to catbox.moe
+
+VERIFICATION TEST:
+✅ Upload Test: https://files.catbox.moe/m08e7h.png
+
+========================================
+SCENE 1: BASIC
+========================================
+Progress GIF (100 frames): https://files.catbox.moe/g33hgg.gif
+Display Images (10 focal planes): https://files.catbox.moe/0beq5n.png
+Eye Views (what eye sees): https://files.catbox.moe/4axm6p.png
+Loss History (JSON): https://files.catbox.moe/3srifa.json
+
+========================================
+SCENE 2: COMPLEX
+========================================
+Progress GIF (100 frames): https://files.catbox.moe/pbql4x.gif
+Display Images (10 focal planes): https://files.catbox.moe/lk19sp.png
+Eye Views (what eye sees): https://files.catbox.moe/v1iche.png
+Loss History (JSON): https://files.catbox.moe/hmn7st.json
+
+========================================
+SCENE 3: STICK FIGURE
+========================================
+Progress GIF (100 frames): https://files.catbox.moe/drfkax.gif
+Display Images (10 focal planes): https://files.catbox.moe/k55fec.png
+Eye Views (what eye sees): https://files.catbox.moe/jswtvk.png
+Loss History (JSON): https://files.catbox.moe/61ywye.json
+
+========================================
+SCENE 4: LAYERED
+========================================
+Progress GIF (100 frames): https://files.catbox.moe/v6nt07.gif
+Display Images (10 focal planes): https://files.catbox.moe/m5e5qs.png
+Eye Views (what eye sees): https://files.catbox.moe/bhobvm.png
+Loss History (JSON): https://files.catbox.moe/wsn66e.json
+
+========================================
+SCENE 5: OFFICE
+========================================
+Progress GIF (100 frames): https://files.catbox.moe/g8e0y3.gif
+Display Images (10 focal planes): https://files.catbox.moe/nyj72e.png
+Eye Views (what eye sees): https://files.catbox.moe/f41il4.png
+Loss History (JSON): https://files.catbox.moe/w9nktu.json
+
+========================================
+SCENE 6: NATURE
+========================================
+Progress GIF (100 frames): https://files.catbox.moe/zx12j8.gif
+Display Images (10 focal planes): https://files.catbox.moe/6joxmt.png
+Eye Views (what eye sees): https://files.catbox.moe/blivxh.png
+Loss History (JSON): https://files.catbox.moe/qi03c4.json
+
+========================================
+SCENE 7: SPHERICAL CHECKERBOARD
+========================================
+Progress GIF (100 frames): https://files.catbox.moe/b9k5el.gif
+Display Images (10 focal planes): https://files.catbox.moe/c5ql62.png
+Eye Views (what eye sees): https://files.catbox.moe/azw4n0.png
+Loss History (JSON): https://files.catbox.moe/y4t3oq.json
+
+========================================
+TECHNICAL SPECIFICATIONS
+========================================
+• Resolution: 512×512 target, 1536×1536 display
+• Multi-ray sampling: 16 rays per pixel
+• Iterations: 100 per scene (every iteration tracked)
+• Focal planes: 10 per scene
+• GPU: NVIDIA A100-SXM4-80GB
+• Peak memory: 2.12 GB
+• Total runtime: ~10 minutes
+• Optimization algorithm: AdamW with mixed precision
+
+========================================
+FILE DESCRIPTIONS
+========================================
+• Progress GIFs: Show optimization evolution (target → optimized → loss curve)
+• Display Images: Show what each focal plane displays (10 different focal lengths)
+• Eye Views: Show what the eye sees when looking at each display
+• Loss History: Complete numerical loss data for analysis
+
+========================================
+DOWNLOAD INSTRUCTIONS
+========================================
+1. Click any URL above to download directly
+2. Files are hosted on catbox.moe (permanent storage)
+3. No account required for download
+4. Right-click → Save As to organize locally
+
+Note: If download fails, try opening URL in browser first, then saving.

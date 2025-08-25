@@ -1,0 +1,222 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\title{Light Field Display Optimizer: Technical Documentation}
+\author{Enhanced Multi-Ray Sampling Implementation}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Overview}
+
+The Light Field Display Optimizer is a PyTorch-based system that optimizes display patterns for light field displays using multi-ray sub-aperture sampling and realistic optical physics simulation. The system optimizes display images to recreate target scenes as viewed through a complete optical system consisting of eye optics, tunable focus lens, and microlens array.
+
+\section{Optical System Model}
+
+\subsection{Eye Optics}
+The human eye is modeled with the following parameters:
+\begin{itemize}
+    \item \textbf{Pupil diameter}: 4.0 mm
+    \item \textbf{Retina distance}: 24.0 mm (from eye lens)
+    \item \textbf{Retina size}: 10.0 mm effective imaging area
+    \item \textbf{Focal length range}: 17.0 - 60.0 mm (accommodation)
+\end{itemize}
+
+\subsection{Multi-Ray Sub-Aperture Sampling}
+The system implements realistic depth-of-field through multi-ray sampling:
+\begin{align}
+\text{Ray origins} &= \text{Pupil samples} \times N_{\text{rays}} \\
+\text{Ray directions} &= \frac{\text{Pupil point} - \text{Retina point}}{|\text{Pupil point} - \text{Retina point}|}
+\end{align}
+
+Where $N_{\text{rays}} = 16$ rays per pixel for realistic blur simulation.
+
+\subsection{Tunable Focus Lens}
+A tunable lens is positioned 50.0 mm from the eye with:
+\begin{itemize}
+    \item \textbf{Diameter}: 15.0 mm
+    \item \textbf{Focal range}: 10.0 - 100.0 mm
+    \item \textbf{Thin lens equation}: $\frac{1}{f} = \frac{1}{s_o} + \frac{1}{s_i}$
+\end{itemize}
+
+\subsection{Microlens Array}
+The microlens array parameters:
+\begin{itemize}
+    \item \textbf{Distance from eye}: 80.0 mm
+    \item \textbf{Array size}: 20.0 mm × 20.0 mm
+    \item \textbf{Pitch}: 0.4 mm (center-to-center spacing)
+    \item \textbf{Focal length}: 1.0 mm
+    \item \textbf{Total microlenses}: 2,500 circular lenses
+\end{itemize}
+
+\section{Display System}
+
+\subsection{Light Field Display}
+The optimizable display consists of:
+\begin{align}
+\mathbf{D} &= \{D_1, D_2, \ldots, D_{N_f}\} \\
+D_i &\in \mathbb{R}^{3 \times H \times W}
+\end{align}
+
+Where:
+\begin{itemize}
+    \item $N_f = 10$ focal planes
+    \item $H = W = 1536$ pixels (display resolution)
+    \item Each $D_i$ represents RGB display image for focal plane $i$
+\end{itemize}
+
+\subsection{Focal Length Assignment}
+Fixed focal lengths are assigned linearly:
+\begin{align}
+f_i = f_{\min} + \frac{i-1}{N_f-1}(f_{\max} - f_{\min})
+\end{align}
+Where $f_{\min} = 10$ mm and $f_{\max} = 100$ mm.
+
+\section{Scene Definitions}
+
+\subsection{Geometric Scenes}
+Six geometric scenes with parametric object definitions:
+\begin{align}
+\text{Object}_j &= \{pos_j, size_j, color_j, shape_j\} \\
+pos_j &\in \mathbb{R}^3 \text{ (world coordinates in mm)} \\
+color_j &\in [0,1]^3 \text{ (RGB values)}
+\end{align}
+
+\subsection{Spherical Checkerboard Scene}
+A MATLAB-compatible spherical checkerboard with:
+\begin{align}
+\text{Sphere center} &= [0, 0, 200] \text{ mm} \\
+\text{Radius} &= 50 \text{ mm} \\
+\text{Pattern} &= \text{1000×1000 grid, 50 pixels per square}
+\end{align}
+
+The checkerboard pattern is mapped using spherical coordinates:
+\begin{align}
+\phi &= \arctan2(Z, X) \\
+\theta &= \arctan2(Y, \sqrt{X^2 + Z^2}) \\
+\text{Square}_{i,j} &= \lfloor\frac{\theta_{\text{norm}} \times 999}{50}\rfloor + \lfloor\frac{\phi_{\text{norm}} \times 999}{50}\rfloor \bmod 2
+\end{align}
+
+\section{Ray Tracing Algorithm}
+
+\subsection{Forward Ray Tracing}
+The system uses forward ray tracing from retina through the complete optical system:
+
+\begin{enumerate}
+    \item \textbf{Retina sampling}: Generate $N_{\text{pixels}}$ retina points
+    \item \textbf{Pupil sampling}: Generate $N_{\text{rays}}$ pupil samples per retina point
+    \item \textbf{Eye lens refraction}: Apply thin lens equation
+    \item \textbf{Tunable lens refraction}: Secondary lens refraction
+    \item \textbf{Microlens selection}: Find nearest microlens for each ray
+    \item \textbf{Microlens refraction}: Apply microlens optical power
+    \item \textbf{Display sampling}: Sample from appropriate display image
+\end{enumerate}
+
+\subsection{Ray-Sphere Intersection}
+For spherical checkerboard scenes, ray-sphere intersection:
+\begin{align}
+\mathbf{oc} &= \mathbf{ray\_origin} - \mathbf{sphere\_center} \\
+a &= \mathbf{ray\_dir} \cdot \mathbf{ray\_dir} \\
+b &= 2(\mathbf{oc} \cdot \mathbf{ray\_dir}) \\
+c &= \mathbf{oc} \cdot \mathbf{oc} - r^2 \\
+\text{discriminant} &= b^2 - 4ac \\
+t &= \frac{-b + \sqrt{\text{discriminant}}}{2a}
+\end{align}
+
+\section{Optimization Process}
+
+\subsection{Loss Function}
+The optimization minimizes mean squared error between target and simulated images:
+\begin{align}
+\mathcal{L} = \frac{1}{HW} \sum_{i=1}^{H} \sum_{j=1}^{W} ||\mathbf{I}_{\text{target}}(i,j) - \mathbf{I}_{\text{simulated}}(i,j)||^2
+\end{align}
+
+\subsection{Optimization Algorithm}
+\begin{itemize}
+    \item \textbf{Optimizer}: AdamW with learning rate 0.02
+    \item \textbf{Weight decay}: $10^{-4}$
+    \item \textbf{Gradient clipping}: Maximum norm 1.0
+    \item \textbf{Mixed precision}: Automatic mixed precision (AMP) for A100 acceleration
+    \item \textbf{Iterations}: 100 per scene
+\end{itemize}
+
+\subsection{Multi-Scene Training}
+The system optimizes seven distinct scenes:
+\begin{enumerate}
+    \item \textbf{Basic}: 3 colored spheres at different depths
+    \item \textbf{Complex}: 4 multi-colored spheres in complex arrangement
+    \item \textbf{Stick Figure}: 6 spheres arranged as humanoid figure
+    \item \textbf{Layered}: 3 spheres at different depth layers
+    \item \textbf{Office}: 4 spheres representing office objects
+    \item \textbf{Nature}: 4 spheres representing outdoor scene
+    \item \textbf{Spherical Checkerboard}: MATLAB-compatible spherical pattern
+\end{enumerate}
+
+\section{Output Generation}
+
+\subsection{Training Progress Visualization}
+For each scene, the system generates:
+\begin{itemize}
+    \item \textbf{Progress GIF}: 100 frames showing optimization evolution
+    \item \textbf{Target image}: Ground truth scene appearance
+    \item \textbf{Simulated image}: Optimized display output
+    \item \textbf{Loss curve}: Convergence visualization
+\end{itemize}
+
+\subsection{Display Analysis}
+\begin{itemize}
+    \item \textbf{Display images}: What each focal plane shows (10 planes per scene)
+    \item \textbf{Eye views}: What the eye sees for each display focal length
+    \item \textbf{Focal length mapping}: 10-100 mm range across display planes
+\end{itemize}
+
+\subsection{Global Analysis}
+\begin{itemize}
+    \item \textbf{Focal length sweep}: 100 frames showing accommodation effects
+    \item \textbf{Eye movement sweep}: 60 frames showing parallax effects
+    \item \textbf{Focus calculation}: $d_{\text{focus}} = \frac{f \times d_{\text{retina}}}{f - d_{\text{retina}}}$
+\end{itemize}
+
+\section{Technical Implementation}
+
+\subsection{Memory Optimization}
+\begin{itemize}
+    \item \textbf{Batch processing}: 4096 pixels per batch
+    \item \textbf{GPU memory management}: Automatic cache clearing
+    \item \textbf{Mixed precision}: FP16/FP32 automatic casting
+    \item \textbf{Gradient accumulation}: Per-scene optimization
+\end{itemize}
+
+\subsection{Computational Complexity}
+\begin{align}
+\text{Rays per optimization} &= N_{\text{pixels}} \times N_{\text{rays}} \times N_{\text{iterations}} \\
+&= 512^2 \times 16 \times 100 = 419,430,400 \text{ rays}
+\end{align}
+
+\subsection{Hardware Requirements}
+\begin{itemize}
+    \item \textbf{GPU}: NVIDIA A100-SXM4-80GB
+    \item \textbf{Memory usage}: ~2.12 GB peak
+    \item \textbf{Compute capability}: CUDA 11.8+
+    \item \textbf{Storage}: 15 GB container disk
+\end{itemize}
+
+\section{Results and Validation}
+
+The optimization system successfully generates:
+\begin{itemize}
+    \item \textbf{28 individual files}: 4 files per scene × 7 scenes
+    \item \textbf{Progress tracking}: Every iteration recorded
+    \item \textbf{Multi-ray sampling}: Realistic depth-of-field effects
+    \item \textbf{Optical accuracy}: Physical ray tracing through complete system
+\end{itemize}
+
+\end{document}

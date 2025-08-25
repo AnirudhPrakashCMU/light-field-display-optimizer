@@ -1,0 +1,56 @@
+# Light Field Display Optimizer - Download URLs
+# Generated from RunPod optimization logs - 2025-08-25
+
+## Upload Test Verification
+Test Checkerboard: https://files.catbox.moe/m08e7h.png
+
+## Scene 1: Basic
+Progress GIF (100 frames): https://files.catbox.moe/g33hgg.gif
+Display Images: https://files.catbox.moe/0beq5n.png
+Eye Views: https://files.catbox.moe/4axm6p.png
+Loss History: https://files.catbox.moe/3srifa.json
+
+## Scene 2: Complex
+Progress GIF (100 frames): https://files.catbox.moe/pbql4x.gif
+Display Images: https://files.catbox.moe/lk19sp.png
+Eye Views: https://files.catbox.moe/v1iche.png
+Loss History: https://files.catbox.moe/hmn7st.json
+
+## Scene 3: Stick Figure
+Progress GIF (100 frames): https://files.catbox.moe/drfkax.gif
+Display Images: https://files.catbox.moe/k55fec.png
+Eye Views: https://files.catbox.moe/jswtvk.png
+Loss History: https://files.catbox.moe/61ywye.json
+
+## Scene 4: Layered
+Progress GIF (100 frames): https://files.catbox.moe/v6nt07.gif
+Display Images: https://files.catbox.moe/m5e5qs.png
+Eye Views: https://files.catbox.moe/bhobvm.png
+Loss History: https://files.catbox.moe/wsn66e.json
+
+## Scene 5: Office
+Progress GIF (100 frames): https://files.catbox.moe/g8e0y3.gif
+Display Images: https://files.catbox.moe/nyj72e.png
+Eye Views: https://files.catbox.moe/f41il4.png
+Loss History: https://files.catbox.moe/w9nktu.json
+
+## Scene 6: Nature
+Progress GIF (100 frames): https://files.catbox.moe/zx12j8.gif
+Display Images: https://files.catbox.moe/6joxmt.png
+Eye Views: https://files.catbox.moe/blivxh.png
+Loss History: https://files.catbox.moe/qi03c4.json
+
+## Scene 7: Spherical Checkerboard
+Progress GIF (100 frames): https://files.catbox.moe/b9k5el.gif
+Display Images: https://files.catbox.moe/c5ql62.png
+Eye Views: https://files.catbox.moe/azw4n0.png
+Loss History: https://files.catbox.moe/y4t3oq.json
+
+## Summary
+- Total Scenes: 7
+- Total Files: 28 individual files
+- Progress GIFs: 7 scenes × 100 frames each
+- All uploads successful to catbox.moe
+- GPU: NVIDIA A100-SXM4-80GB (85.1GB)
+- Peak Memory: ~2.12 GB
+- Total Runtime: ~10 minutes
