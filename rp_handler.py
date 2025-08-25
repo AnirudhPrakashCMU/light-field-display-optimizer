@@ -550,24 +550,35 @@ def handler(job):
         final_memory = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         max_memory = torch.cuda.max_memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         
+        # Print all URLs clearly for easy access
+        print("\n" + "="*60)
+        print("📥 DOWNLOAD LINKS - CLICK TO ACCESS RESULTS:")
+        print("="*60)
+        
+        if archive_url:
+            print(f"🎯 COMPLETE ARCHIVE: {archive_url}")
+        
+        print(f"\n📊 INDIVIDUAL FILES:")
+        for filename, url in all_uploaded_urls.items():
+            print(f"   {filename}: {url}")
+        
+        print("="*60)
+        
         return {
             'status': 'success',
             'message': f'COMPLETE optimization: ALL 7 scenes, {iterations} iterations each, {max_memory:.2f}GB peak memory',
+            'DOWNLOAD_COMPLETE_ARCHIVE': archive_url,
+            'DOWNLOAD_INDIVIDUAL_FILES': all_uploaded_urls,
             'scenes_completed': list(all_results.keys()),
             'total_scenes': len(all_results),
-            'results': all_results,
             'gpu_memory_peak': max_memory,
-            'archive_path': archive_path,
             'archive_size_mb': archive_size,
-            'file_io_urls': all_uploaded_urls,
-            'archive_url': archive_url,
-            'upload_success': len(all_uploaded_urls) > 0,
             'outputs_generated': {
-                'progress_gifs': f'{len(all_results)} scenes x {iterations} frames each',
-                'focal_sweep_gif': '100 frames',
+                'progress_gifs': f'{len(all_results)} scenes x {iterations//5} frames each',
+                'focal_sweep_gif': '100 frames', 
                 'eye_movement_gif': '60 frames',
-                'display_images': f'{len(all_results)} scenes x focal planes each',
-                'eye_views': f'{len(all_results)} scenes x focal planes each'
+                'display_images': f'{len(all_results)} scenes',
+                'eye_views': f'{len(all_results)} scenes'
             },
             'gpu_info': gpu_info,
             'timestamp': datetime.now().isoformat()
