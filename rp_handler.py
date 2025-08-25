@@ -113,7 +113,7 @@ class LightFieldDisplay(nn.Module):
         print(f"   Memory: {memory_used:.2f} GB")
 
 def upload_to_fileio(file_path):
-    """Upload file to file.io with enhanced error handling"""
+    """Upload file to file.io with robust error handling"""
     
     if not os.path.exists(file_path):
         print(f"❌ File not found: {file_path}")
@@ -122,11 +122,40 @@ def upload_to_fileio(file_path):
     file_size = os.path.getsize(file_path) / 1024**2
     filename = os.path.basename(file_path)
     
-    print(f"📤 Uploading {filename} ({file_size:.1f} MB)...")
+    print(f"📤 Uploading {filename} ({file_size:.1f} MB) to file.io...")
     
-    # Skip upload, just return a placeholder for testing
-    print(f"⚠️ Upload disabled for debugging - file ready at {file_path}")
-    return f"file://tmp/{filename}"
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'file': (filename, f, 'application/octet-stream')}
+            response = requests.post('https://file.io', files=files, timeout=180)
+        
+        print(f"   Response status: {response.status_code}")
+        
+        if response.status_code == 200:
+            try:
+                result = response.json()
+                if result.get('success', False):
+                    url = result.get('link', '')
+                    if url:
+                        print(f"✅ Uploaded successfully: {url}")
+                        return url
+                    else:
+                        print(f"❌ No download link in response: {result}")
+                else:
+                    print(f"❌ Upload failed: {result.get('message', 'Unknown error')}")
+            except json.JSONDecodeError:
+                print(f"❌ Invalid JSON response: {response.text[:200]}")
+        else:
+            print(f"❌ HTTP error {response.status_code}: {response.text[:200]}")
+    
+    except requests.exceptions.Timeout:
+        print(f"❌ Upload timeout for {filename}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Request error: {str(e)}")
+    except Exception as e:
+        print(f"❌ Unexpected error: {str(e)}")
+    
+    return None
 
 def generate_target_for_scene(scene_objects, resolution):
     """Generate appropriate target image for scene type"""
