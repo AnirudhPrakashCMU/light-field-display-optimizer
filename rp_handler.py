@@ -112,7 +112,7 @@ class LightFieldDisplay(nn.Module):
         memory_used = torch.cuda.memory_allocated() / 1024**3 if torch.cuda.is_available() else 0
         print(f"   Memory: {memory_used:.2f} GB")
 
-def upload_to_fileio(file_path):
+def upload_to_0x0(file_path):
     """Upload file to file.io with robust error handling"""
     
     if not os.path.exists(file_path):
@@ -271,8 +271,8 @@ def optimize_scene(scene_name, scene_objects, iterations, resolution, rays_per_p
         
         loss_history.append(loss.item())
         
-        # Save every 10th iteration for progress GIF
-        if iteration % 10 == 0:
+        # Save EVERY iteration for progress GIF
+        if True:  # Save every single iteration
             fig, axes = plt.subplots(1, 3, figsize=(12, 4))
             
             axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
@@ -357,9 +357,9 @@ def optimize_scene(scene_name, scene_objects, iterations, resolution, rays_per_p
     # Upload all files for this scene immediately
     print(f"📤 Uploading {scene_name} results immediately...")
     
-    progress_url = upload_to_fileio(progress_gif_path)
-    displays_url = upload_to_fileio(displays_path) 
-    eye_views_url = upload_to_fileio(eye_views_path)
+    progress_url = upload_to_0x0(progress_gif_path)
+    displays_url = upload_to_0x0(displays_path) 
+    eye_views_url = upload_to_0x0(eye_views_path)
     
     # Upload loss history as JSON
     loss_json_path = f'/tmp/{scene_name}_loss_history.json'
@@ -372,7 +372,7 @@ def optimize_scene(scene_name, scene_objects, iterations, resolution, rays_per_p
             'rays_per_pixel': rays_per_pixel
         }, f, indent=2)
     
-    loss_url = upload_to_fileio(loss_json_path)
+    loss_url = upload_to_0x0(loss_json_path)
     os.remove(loss_json_path)
     
     uploaded_count = sum([1 for x in [progress_url, displays_url, eye_views_url, loss_url] if x])
@@ -519,7 +519,7 @@ def handler(job):
         inp = job.get("input", {}) or {}
         
         # Parameters
-        iterations = inp.get("iterations", 250)
+        iterations = inp.get("iterations", 100)  # Reduced to 100
         resolution = inp.get("resolution", 512)
         rays_per_pixel = inp.get("rays_per_pixel", 16)
         
@@ -563,8 +563,8 @@ def handler(job):
         focal_gif_path, eye_gif_path = create_global_gifs(resolution, rays_per_pixel)
         
         # Upload global GIFs
-        focal_url = upload_to_fileio(focal_gif_path)
-        eye_url = upload_to_fileio(eye_gif_path)
+        focal_url = upload_to_0x0(focal_gif_path)
+        eye_url = upload_to_0x0(eye_gif_path)
         
         if focal_url:
             all_download_urls['focal_length_sweep.gif'] = focal_url
@@ -589,7 +589,7 @@ def handler(job):
                 'gpu_info': gpu_info,
                 'download_urls': all_download_urls,
                 'outputs_included': {
-                    'progress_gifs': f'{len(all_scene_results)} scenes x {iterations//10} frames each',
+                    'progress_gifs': f'{len(all_scene_results)} scenes x {iterations} frames each',
                     'focal_sweep_gif': '100 frames showing focus effects',
                     'eye_movement_gif': '60 frames showing parallax',
                     'display_images': f'{len(all_scene_results)} scenes x 10 focal planes each',
@@ -605,7 +605,7 @@ def handler(job):
             os.remove(summary_file)
         
         # Upload final archive
-        archive_url = upload_to_fileio(archive_path)
+        archive_url = upload_to_0x0(archive_path)
         archive_size = os.path.getsize(archive_path) / 1024**2
         
         # Final memory report
@@ -640,7 +640,7 @@ def handler(job):
             'archive_size_mb': archive_size,
             'gpu_memory_peak': max_memory,
             'outputs_summary': {
-                'progress_gifs': f'{len(all_scene_results)} scenes x {iterations//10} frames each',
+                'progress_gifs': f'{len(all_scene_results)} scenes x {iterations} frames each',
                 'focal_sweep_gif': '100 frames',
                 'eye_movement_gif': '60 frames',
                 'display_images': f'{len(all_scene_results)} scenes x 10 focal planes each',
