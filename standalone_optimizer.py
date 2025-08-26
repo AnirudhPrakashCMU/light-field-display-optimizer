@@ -451,7 +451,7 @@ def upload_to_catbox(file_path):
     
     return None
 
-def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
+def optimize_single_scene(scene_name, scene_objects, iterations, resolution, local_results_dir):
     """REAL optimization with ACTUAL ray tracing for ALL scenes"""
     
     print(f"\n🎯 REAL Optimization: {scene_name} ({iterations} iterations)")
@@ -695,6 +695,22 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
     for f in real_eye_frames:
         os.remove(f)
     
+    # Save locally AND upload (use global timestamp from main)
+    scene_local_dir = f'{local_results_dir}/scenes/{scene_name}'
+    os.makedirs(scene_local_dir, exist_ok=True)
+    
+    # Copy all files locally with proper names
+    import shutil
+    shutil.copy2(progress_gif, f'{scene_local_dir}/progress_all_frames.gif')
+    shutil.copy2(displays_path, f'{scene_local_dir}/what_displays_show.png') 
+    shutil.copy2(eye_views_path, f'{scene_local_dir}/what_eye_sees.png')
+    shutil.copy2(focal_sweep_gif, f'{scene_local_dir}/focal_sweep_through_display.gif')
+    shutil.copy2(eye_movement_gif, f'{scene_local_dir}/eye_movement_through_display.gif')
+    shutil.copy2(real_focal_sweep_gif, f'{scene_local_dir}/REAL_scene_focal_sweep.gif')
+    shutil.copy2(real_eye_movement_gif, f'{scene_local_dir}/REAL_scene_eye_movement.gif')
+    
+    print(f"💾 All outputs saved locally to: {scene_local_dir}")
+    
     # Upload ALL outputs (now 7 outputs per scene)
     print(f"   Uploading all results...")
     progress_url = upload_to_catbox(progress_gif)
@@ -730,6 +746,12 @@ def main():
         
         print(f"⚙️ REAL Parameters: {iterations} iterations per scene, {resolution}x{resolution}")
         
+        # Create local results directory with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        local_results_dir = f'/workspace/light_field_results_{timestamp}'
+        os.makedirs(local_results_dir, exist_ok=True)
+        print(f"📁 Local results directory: {local_results_dir}")
+        
         # ALL 7 SCENES with REAL 3D objects
         scene_names = ['basic', 'complex', 'stick_figure', 'layered', 'office', 'nature', 'spherical_checkerboard']
         
@@ -739,7 +761,7 @@ def main():
         for scene_name in scene_names:
             scene_objects = create_scene_objects(scene_name)
             
-            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution)
+            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, local_results_dir)
             all_results[scene_name] = scene_result
             
             # Collect ALL URLs for this scene (now 7 outputs per scene)
@@ -792,7 +814,32 @@ def main():
         with open(results_file, 'w') as f:
             json.dump(complete_results, f, indent=2)
         
+        # Create final ZIP archive
+        print(f"\n📦 Creating final ZIP archive...")
+        zip_path = f'/workspace/complete_light_field_optimization_{timestamp}.zip'
+        
+        import zipfile
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Add all scene results
+            for root, _, files in os.walk(local_results_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, '/workspace')
+                    zipf.write(file_path, arcname)
+            
+            # Add the results JSON
+            zipf.write(results_file, f'light_field_results_{timestamp}/optimization_results.json')
+        
+        zip_size = os.path.getsize(zip_path) / 1024**2
+        print(f"📦 ZIP archive created: {zip_path} ({zip_size:.1f} MB)")
+        
+        # Try to upload ZIP
+        zip_url = upload_to_catbox(zip_path)
+        if zip_url:
+            print(f"📥 ZIP download URL: {zip_url}")
+        
         print(f"\n📋 Results saved to: {results_file}")
+        print(f"📦 ZIP archive: {zip_path}")
         print(f"✅ ALL 7 SCENES REAL OPTIMIZATION COMPLETE!")
         
         return complete_results
