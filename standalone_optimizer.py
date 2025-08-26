@@ -357,7 +357,7 @@ def render_individual_display_view(eye_position, eye_focal_length, display_syste
     return final_colors.reshape(resolution, resolution, 3)
 
 def render_eye_view_through_display(eye_position, eye_focal_length, display_system, resolution=256):
-    """HONEST: What eye sees through complete system - RAW AVERAGE of ALL display contributions"""
+    """HONEST: What eye sees through complete system - PURE SUM of ALL display contributions"""
     
     
     # Render EACH display individually through complete optical system
@@ -372,8 +372,7 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
         # RAW ADDITION - NO WEIGHTS, NO FOCUS CALCULATIONS
         combined_image += individual_view
     
-    # RAW AVERAGE of ALL displays
-    combined_image = combined_image / display_system.display_images.shape[0]
+    # PURE SUM of ALL displays
     
     return combined_image
 
