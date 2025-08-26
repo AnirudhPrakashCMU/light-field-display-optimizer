@@ -223,15 +223,12 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
         'display_system': display_system
     }
 
-def create_optical_system_sweeps(display_system, resolution):
-    """Create focal and eye sweeps through complete optical system"""
-    
-    print("🎬 Creating optical system sweeps...")
+def create_optical_system_sweeps(display_system, resolution, scene_name):
+    """Create focal and eye sweeps through complete optical system for specific scene"""
     
     # Focal length sweep through complete optical system
-    print("   Creating focal sweep through optical system...")
     focal_frames = []
-    focal_lengths = torch.linspace(20.0, 50.0, 20, device=device)
+    focal_lengths = torch.linspace(20.0, 50.0, 15, device=device)
     
     for i, fl in enumerate(focal_lengths):
         # What eye sees through optical system at this focal length
@@ -240,20 +237,20 @@ def create_optical_system_sweeps(display_system, resolution):
             size=(resolution, resolution), mode='bilinear'
         ).squeeze(0).permute(1, 2, 0)
         
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(10, 6))
         plt.imshow(np.clip(simulated.cpu().numpy(), 0, 1))
-        plt.title(f'Eye View Through Optical System\\nEye FL: {fl:.1f}mm')
+        plt.title(f'{scene_name.title()} Through Optical System\\nEye FL: {fl:.1f}mm')
         plt.axis('off')
-        plt.suptitle(f'Optical System Focal Sweep - Frame {i+1}/20')
+        plt.suptitle(f'{scene_name} Optical Focal Sweep - Frame {i+1}/15')
         plt.tight_layout()
         
-        frame_path = f'/tmp/optical_focal_frame_{i:03d}.png'
+        frame_path = f'/tmp/{scene_name}_optical_focal_{i:03d}.png'
         plt.savefig(frame_path, dpi=100, bbox_inches='tight')
         plt.close()
         focal_frames.append(frame_path)
     
     focal_images = [Image.open(f) for f in focal_frames]
-    optical_focal_gif = '/tmp/optical_focal_sweep.gif'
+    optical_focal_gif = f'/tmp/{scene_name}_optical_focal_sweep.gif'
     focal_images[0].save(optical_focal_gif, save_all=True, append_images=focal_images[1:],
                         duration=200, loop=0, optimize=True)
     
@@ -261,9 +258,8 @@ def create_optical_system_sweeps(display_system, resolution):
         os.remove(f)
     
     # Eye position sweep through optical system
-    print("   Creating eye movement through optical system...")
     eye_frames = []
-    eye_positions = torch.linspace(-10, 10, 15, device=device)
+    eye_positions = torch.linspace(-8, 8, 10, device=device)
     
     for i, eye_x in enumerate(eye_positions):
         # What eye sees through optical system from this position
@@ -272,20 +268,20 @@ def create_optical_system_sweeps(display_system, resolution):
             size=(resolution, resolution), mode='bilinear'
         ).squeeze(0).permute(1, 2, 0)
         
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(10, 6))
         plt.imshow(np.clip(simulated.cpu().numpy(), 0, 1))
-        plt.title(f'Eye View Through Optical System\\nEye Position X: {eye_x:.1f}mm')
+        plt.title(f'{scene_name.title()} Through Optical System\\nEye Position X: {eye_x:.1f}mm')
         plt.axis('off')
-        plt.suptitle(f'Optical System Eye Movement - Frame {i+1}/15')
+        plt.suptitle(f'{scene_name} Optical Eye Movement - Frame {i+1}/10')
         plt.tight_layout()
         
-        frame_path = f'/tmp/optical_eye_frame_{i:03d}.png'
+        frame_path = f'/tmp/{scene_name}_optical_eye_{i:03d}.png'
         plt.savefig(frame_path, dpi=100, bbox_inches='tight')
         plt.close()
         eye_frames.append(frame_path)
     
     eye_images = [Image.open(f) for f in eye_frames]
-    optical_eye_gif = '/tmp/optical_eye_movement.gif'
+    optical_eye_gif = f'/tmp/{scene_name}_optical_eye_movement.gif'
     eye_images[0].save(optical_eye_gif, save_all=True, append_images=eye_images[1:],
                       duration=200, loop=0, optimize=True)
     
@@ -330,20 +326,25 @@ def handler(job):
             torch.cuda.empty_cache()
             print(f"✅ {scene_name} complete")
         
-        # Use last display system for optical sweeps
-        last_display = list(all_results.values())[-1]['display_system']
+        # Create optical system sweeps for ALL scenes
+        print(f"\n🎬 Creating optical system sweeps for ALL scenes...")
         
-        # Create optical system sweeps
-        optical_focal_gif, optical_eye_gif = create_optical_system_sweeps(last_display, resolution)
-        
-        # Upload optical sweeps
-        optical_focal_url = upload_to_catbox(optical_focal_gif)
-        optical_eye_url = upload_to_catbox(optical_eye_gif)
-        
-        if optical_focal_url:
-            all_urls['optical_focal_sweep_gif'] = optical_focal_url
-        if optical_eye_url:
-            all_urls['optical_eye_movement_gif'] = optical_eye_url
+        for scene_name, scene_result in all_results.items():
+            print(f"   Creating sweeps for {scene_name}...")
+            
+            display_system = scene_result['display_system']
+            
+            # Focal sweep for this scene
+            optical_focal_gif, optical_eye_gif = create_optical_system_sweeps(display_system, resolution, scene_name)
+            
+            # Upload scene-specific sweeps
+            focal_url = upload_to_catbox(optical_focal_gif)
+            eye_url = upload_to_catbox(optical_eye_gif)
+            
+            if focal_url:
+                all_urls[f'{scene_name}_optical_focal_sweep'] = focal_url
+            if eye_url:
+                all_urls[f'{scene_name}_optical_eye_movement'] = eye_url
         
         # Create summary
         summary = {
