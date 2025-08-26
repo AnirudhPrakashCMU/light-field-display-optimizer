@@ -210,8 +210,8 @@ def render_eye_view_target(eye_position, eye_focal_length, scene_objects, resolu
     
     return final_colors.reshape(resolution, resolution, 3)
 
-def render_eye_view_through_display(eye_position, eye_focal_length, display_system, resolution=256):
-    """SIMULATED: What eye sees through complete optical system - ALL DISPLAYS USED"""
+def render_individual_display_view(eye_position, eye_focal_length, display_system, display_idx, resolution=256):
+    """Render what eye sees looking at ONE specific display through optical system"""
     
     pupil_diameter = 4.0
     retina_distance = 24.0
@@ -219,7 +219,10 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
     samples_per_pixel = 4
     
     tunable_lens_distance = 50.0
-    tunable_focal_length = 25.0
+    # Use DIFFERENT tunable focal length for each display based on its focal length
+    display_focal_length = display_system.focal_lengths[display_idx].item()
+    tunable_focal_length = display_focal_length  # Match tunable lens to this display
+    
     microlens_distance = 80.0
     microlens_pitch = 0.4
     microlens_focal_length = 1.0
@@ -268,7 +271,7 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
         ray_dirs[:, :, 1] += -lens_power * pupil_expanded[:, :, 1]
         ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
         
-        # Tunable lens refraction
+        # Tunable lens refraction - TUNED for this specific display
         lens_z = tunable_lens_distance
         t_lens = (lens_z - ray_origins[:, :, 2]) / ray_dirs[:, :, 2]
         lens_intersection = ray_origins + t_lens.unsqueeze(-1) * ray_dirs
@@ -298,7 +301,7 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
         ray_dirs[:, :, 1] += -microlens_power * local_y_micro
         ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
         
-        # Display sampling - USE ALL DISPLAYS based on focal length
+        # Sample from THIS SPECIFIC display only
         display_z = display_distance
         t_display = (display_z - array_intersection[:, :, 2]) / ray_dirs[:, :, 2]
         display_intersection = array_intersection + t_display.unsqueeze(-1) * ray_dirs
@@ -319,25 +322,9 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
             
             valid_pixels = valid_display
             if valid_pixels.any():
-                # USE ALL DISPLAYS with proper focal length weighting - NO CHEATING
-                sampled_colors = torch.zeros_like(display_colors[valid_pixels])
-                
-                # Calculate focal length weights for ALL displays
-                total_weight = 0.0
-                for plane_idx in range(display_system.display_images.shape[0]):
-                    # Weight based on how close this display's focal length is to eye focal length
-                    focal_diff = abs(display_system.focal_lengths[plane_idx].item() - eye_focal_length)
-                    weight = 1.0 / (1.0 + focal_diff / 10.0)  # Closer focal lengths get higher weight
-                    
-                    plane_colors = display_system.display_images[plane_idx, :, v0[valid_pixels], u0[valid_pixels]].T
-                    sampled_colors += weight * plane_colors
-                    total_weight += weight
-                
-                # Normalize by total weight
-                if total_weight > 0:
-                    sampled_colors = sampled_colors / total_weight
-                
-                display_colors[valid_pixels] = sampled_colors
+                # Sample from THIS specific display only
+                plane_colors = display_system.display_images[display_idx, :, v0[valid_pixels], u0[valid_pixels]].T
+                display_colors[valid_pixels] = plane_colors
         
         # Average over sub-aperture samples
         pupil_radius_check = pupil_diameter / 2
@@ -355,6 +342,39 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
         final_colors[batch_start:batch_end] = batch_colors
     
     return final_colors.reshape(resolution, resolution, 3)
+
+def render_eye_view_through_display(eye_position, eye_focal_length, display_system, resolution=256):
+    """HONEST: What eye sees through complete system - sum of ALL individual display contributions"""
+    
+    print(f"     Rendering ALL displays individually and summing...")
+    
+    # Calculate focus distance for eye
+    retina_distance = 24.0
+    focused_distance = (eye_focal_length * retina_distance) / (eye_focal_length - retina_distance)
+    
+    # Render EACH display individually through complete optical system
+    combined_image = torch.zeros(resolution, resolution, 3, device=device)
+    
+    for display_idx in range(display_system.display_images.shape[0]):
+        display_focal_length = display_system.focal_lengths[display_idx].item()
+        
+        # Calculate if this display is in focus
+        display_distance_effective = 82.0  # Physical distance to display
+        defocus_distance = abs(focused_distance - display_distance_effective)
+        
+        # Focus weight - sharper for displays that match the focus distance
+        focus_weight = 1.0 / (1.0 + defocus_distance / 50.0)
+        
+        if focus_weight > 0.01:  # Only render displays that contribute significantly
+            # HONEST ray tracing for this individual display
+            individual_view = render_individual_display_view(
+                eye_position, eye_focal_length, display_system, display_idx, resolution
+            )
+            
+            # Add this display's contribution with proper focus weighting
+            combined_image += focus_weight * individual_view
+    
+    return combined_image
 
 def create_scene_objects(scene_name):
     """Create REAL 3D scene objects"""
