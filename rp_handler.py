@@ -238,7 +238,7 @@ def create_optical_system_sweeps(display_system, resolution, scene_name):
         ).squeeze(0).permute(1, 2, 0)
         
         plt.figure(figsize=(10, 6))
-        plt.imshow(np.clip(simulated.cpu().numpy(), 0, 1))
+        plt.imshow(np.clip(simulated.detach().cpu().numpy(), 0, 1))
         plt.title(f'{scene_name.title()} Through Optical System\\nEye FL: {fl:.1f}mm')
         plt.axis('off')
         plt.suptitle(f'{scene_name} Optical Focal Sweep - Frame {i+1}/15')
@@ -269,7 +269,7 @@ def create_optical_system_sweeps(display_system, resolution, scene_name):
         ).squeeze(0).permute(1, 2, 0)
         
         plt.figure(figsize=(10, 6))
-        plt.imshow(np.clip(simulated.cpu().numpy(), 0, 1))
+        plt.imshow(np.clip(simulated.detach().cpu().numpy(), 0, 1))
         plt.title(f'{scene_name.title()} Through Optical System\\nEye Position X: {eye_x:.1f}mm')
         plt.axis('off')
         plt.suptitle(f'{scene_name} Optical Eye Movement - Frame {i+1}/10')
@@ -302,7 +302,7 @@ def handler(job):
         
         # Test upload
         test_img = torch.zeros(32, 32, 3)
-        plt.imsave('/tmp/test.png', test_img.numpy())
+        plt.imsave('/tmp/test.png', test_img.detach().numpy())
         test_url = upload_to_catbox('/tmp/test.png')
         
         if not test_url:
