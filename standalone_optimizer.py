@@ -95,12 +95,13 @@ def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
     return hit_mask, t
 
 def trace_rays_to_scene(ray_origins, ray_dirs, scene_objects):
-    """REAL ray tracing to 3D scene objects"""
+    """REAL ray tracing to 3D scene objects - FIXED NO CHEATING"""
     
     batch_size = ray_origins.shape[0]
     colors = torch.zeros(batch_size, 3, device=device)
+    depths = torch.full((batch_size,), float('inf'), device=device)
     
-    # For each scene object, do REAL ray tracing
+    # For each scene object, do REAL ray tracing with proper depth sorting
     for obj in scene_objects:
         if isinstance(obj, SceneObject):
             # Ray-sphere intersection for each object
@@ -108,9 +109,13 @@ def trace_rays_to_scene(ray_origins, ray_dirs, scene_objects):
                 ray_origins, ray_dirs, obj.position, obj.size
             )
             
-            # Color hits with object color
+            # Only color if this hit is closer than previous hits
             if hit_mask.any():
-                colors[hit_mask] = obj.color
+                closer_hits = hit_mask & (t < depths)
+                if closer_hits.any():
+                    colors[closer_hits] = obj.color
+                    depths[closer_hits] = t[closer_hits]
+                    
         elif isinstance(obj, SphericalCheckerboard):
             # Ray-sphere intersection for checkerboard
             hit_mask, t = ray_sphere_intersection(
@@ -118,11 +123,14 @@ def trace_rays_to_scene(ray_origins, ray_dirs, scene_objects):
             )
             
             if hit_mask.any():
-                intersection_points = ray_origins[hit_mask] + t[hit_mask].unsqueeze(-1) * ray_dirs[hit_mask]
-                checkerboard_colors = obj.get_color(intersection_points)
-                colors[hit_mask, 0] = checkerboard_colors
-                colors[hit_mask, 1] = checkerboard_colors
-                colors[hit_mask, 2] = checkerboard_colors
+                closer_hits = hit_mask & (t < depths)
+                if closer_hits.any():
+                    intersection_points = ray_origins[closer_hits] + t[closer_hits].unsqueeze(-1) * ray_dirs[closer_hits]
+                    checkerboard_colors = obj.get_color(intersection_points)
+                    colors[closer_hits, 0] = checkerboard_colors
+                    colors[closer_hits, 1] = checkerboard_colors
+                    colors[closer_hits, 2] = checkerboard_colors
+                    depths[closer_hits] = t[closer_hits]
     
     return colors
 
