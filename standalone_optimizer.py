@@ -140,7 +140,7 @@ def render_eye_view_target(eye_position, eye_focal_length, scene_objects, resolu
     pupil_diameter = 4.0
     retina_distance = 24.0
     retina_size = 8.0
-    samples_per_pixel = 8
+    samples_per_pixel = 4  # Match simulated for fair comparison
     
     # Create retina grid
     y_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
@@ -160,7 +160,7 @@ def render_eye_view_target(eye_position, eye_focal_length, scene_objects, resolu
     pupil_samples = generate_pupil_samples(M, pupil_radius)
     
     # Process in batches
-    batch_size = min(1024, N)
+    batch_size = min(512, N)  # Match simulated for consistency
     final_colors = torch.zeros(N, 3, device=device)
     
     for batch_start in range(0, N, batch_size):
