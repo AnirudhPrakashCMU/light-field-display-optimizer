@@ -406,8 +406,9 @@ class LightFieldDisplay(nn.Module):
     def __init__(self, resolution=512, num_planes=8):
         super().__init__()
         
+        # Initialize displays with PURE WHITE instead of random
         self.display_images = nn.Parameter(
-            torch.rand(num_planes, 3, resolution, resolution, device=device) * 0.5
+            torch.ones(num_planes, 3, resolution, resolution, device=device)
         )
         
         self.focal_lengths = torch.linspace(10, 100, num_planes, device=device)
