@@ -101,6 +101,10 @@ def trace_rays_to_scene(ray_origins, ray_dirs, scene_objects):
     colors = torch.zeros(batch_size, 3, device=device)
     depths = torch.full((batch_size,), float('inf'), device=device)
     
+    # Handle both list of objects and single SphericalCheckerboard
+    if isinstance(scene_objects, SphericalCheckerboard):
+        scene_objects = [scene_objects]  # Convert to list for iteration
+    
     # For each scene object, do REAL ray tracing with proper depth sorting
     for obj in scene_objects:
         if isinstance(obj, SceneObject):
@@ -416,7 +420,7 @@ def upload_to_catbox(file_path):
         with open(file_path, 'rb') as f:
             files = {'fileToUpload': f}
             data = {'reqtype': 'fileupload'}
-            response = requests.post('https://catbox.moe/user/api.php', files=files, data=data, timeout=120)
+            response = requests.post('https://catbox.moe/user/api.php', files=files, data=data, timeout=30)
         
         if response.status_code == 200:
             url = response.text.strip()
@@ -424,7 +428,26 @@ def upload_to_catbox(file_path):
                 print(f"✅ Uploaded: {os.path.basename(file_path)} -> {url}")
                 return url
     except Exception as e:
-        print(f"❌ Upload error for {os.path.basename(file_path)}: {e}")
+        # Try file.io as backup
+        try:
+            with open(file_path, 'rb') as f:
+                response = requests.post('https://file.io', files={'file': f}, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('success'):
+                    url = result.get('link')
+                    print(f"✅ Uploaded (file.io): {os.path.basename(file_path)} -> {url}")
+                    return url
+        except:
+            pass
+        
+        # Save locally if upload fails
+        local_path = f'/workspace/results_{os.path.basename(file_path)}'
+        import shutil
+        shutil.copy2(file_path, local_path)
+        print(f"💾 Saved locally: {local_path}")
+        return f"file://{local_path}"
     
     return None
 
