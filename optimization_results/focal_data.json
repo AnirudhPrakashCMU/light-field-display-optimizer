@@ -1,0 +1,23 @@
+{
+  "display_focal_lengths": [
+    10.0,
+    40.0,
+    70.0,
+    100.0
+  ],
+  "focal_length_sweep_range": [
+    20.0,
+    50.0
+  ],
+  "eye_movement_range": [
+    -10.0,
+    10.0
+  ],
+  "optimization_specs": {
+    "iterations": 50,
+    "resolution": 128,
+    "rays_per_pixel": 4,
+    "display_resolution": 512,
+    "focal_planes": 4
+  }
+}
