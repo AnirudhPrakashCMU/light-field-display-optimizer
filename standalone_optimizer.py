@@ -344,35 +344,24 @@ def render_individual_display_view(eye_position, eye_focal_length, display_syste
     return final_colors.reshape(resolution, resolution, 3)
 
 def render_eye_view_through_display(eye_position, eye_focal_length, display_system, resolution=256):
-    """HONEST: What eye sees through complete system - sum of ALL individual display contributions"""
+    """HONEST: What eye sees through complete system - RAW AVERAGE of ALL display contributions"""
     
-    print(f"     Rendering ALL displays individually and summing...")
-    
-    # Calculate focus distance for eye
-    retina_distance = 24.0
-    focused_distance = (eye_focal_length * retina_distance) / (eye_focal_length - retina_distance)
+    print(f"     Rendering ALL displays individually and raw averaging...")
     
     # Render EACH display individually through complete optical system
     combined_image = torch.zeros(resolution, resolution, 3, device=device)
     
     for display_idx in range(display_system.display_images.shape[0]):
-        display_focal_length = display_system.focal_lengths[display_idx].item()
+        # HONEST ray tracing for this individual display
+        individual_view = render_individual_display_view(
+            eye_position, eye_focal_length, display_system, display_idx, resolution
+        )
         
-        # Calculate if this display is in focus
-        display_distance_effective = 82.0  # Physical distance to display
-        defocus_distance = abs(focused_distance - display_distance_effective)
-        
-        # Focus weight - sharper for displays that match the focus distance
-        focus_weight = 1.0 / (1.0 + defocus_distance / 50.0)
-        
-        if focus_weight > 0.01:  # Only render displays that contribute significantly
-            # HONEST ray tracing for this individual display
-            individual_view = render_individual_display_view(
-                eye_position, eye_focal_length, display_system, display_idx, resolution
-            )
-            
-            # Add this display's contribution with proper focus weighting
-            combined_image += focus_weight * individual_view
+        # RAW ADDITION - NO WEIGHTS, NO FOCUS CALCULATIONS
+        combined_image += individual_view
+    
+    # RAW AVERAGE of ALL displays
+    combined_image = combined_image / display_system.display_images.shape[0]
     
     return combined_image
 
