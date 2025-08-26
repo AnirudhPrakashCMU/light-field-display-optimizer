@@ -318,13 +318,14 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
             
             valid_pixels = valid_display
             if valid_pixels.any():
-                # Sample from ALL display planes
-                sampled_colors = torch.zeros_like(display_colors[valid_pixels])
-                for plane_idx in range(display_system.display_images.shape[0]):
-                    plane_colors = display_system.display_images[plane_idx, :, v0[valid_pixels], u0[valid_pixels]].T
-                    sampled_colors += plane_colors / display_system.display_images.shape[0]
+                # REAL focal plane selection based on eye focal length
+                # Find closest focal plane match
+                focal_diff = torch.abs(display_system.focal_lengths - eye_focal_length)
+                best_plane = torch.argmin(focal_diff)
                 
-                display_colors[valid_pixels] = sampled_colors
+                # Sample from the CORRECT focal plane only
+                plane_colors = display_system.display_images[best_plane, :, v0[valid_pixels], u0[valid_pixels]].T
+                display_colors[valid_pixels] = plane_colors
         
         # Average over sub-aperture samples
         pupil_radius_check = pupil_diameter / 2
@@ -521,21 +522,21 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
     plt.savefig(displays_path, dpi=150, bbox_inches='tight')
     plt.close()
     
-    # What eye sees for each display
+    # What eye sees for each display - REAL ray tracing through optical system
     fig, axes = plt.subplots(2, 4, figsize=(16, 8))
     for i in range(8):
         row, col = i // 4, i % 4
-        # What eye sees when looking at THIS specific display
-        individual_display_view = torch.nn.functional.interpolate(
-            display_system.display_images[i].unsqueeze(0), 
-            size=(resolution, resolution), mode='bilinear'
-        ).squeeze(0).permute(1, 2, 0)
+        with torch.no_grad():
+            # REAL: Ray trace through optical system using THIS specific display focal length
+            eye_view_real = render_eye_view_through_display(
+                eye_position, display_system.focal_lengths[i].item(), display_system, resolution
+            )
         
-        axes[row, col].imshow(np.clip(individual_display_view.detach().cpu().numpy(), 0, 1))
-        axes[row, col].set_title(f'Eye View {i+1}\\nFL: {display_system.focal_lengths[i]:.0f}mm')
+        axes[row, col].imshow(np.clip(eye_view_real.detach().cpu().numpy(), 0, 1))
+        axes[row, col].set_title(f'REAL Eye View {i+1}\\nFL: {display_system.focal_lengths[i]:.0f}mm')
         axes[row, col].axis('off')
     
-    plt.suptitle(f'{scene_name.title()} - What Eye Sees for Each Display')
+    plt.suptitle(f'{scene_name.title()} - REAL Ray Traced Eye Views for Each Display')
     plt.tight_layout()
     eye_views_path = f'/tmp/{scene_name}_eye_views.png'
     plt.savefig(eye_views_path, dpi=150, bbox_inches='tight')

@@ -1,0 +1,26 @@
+{
+  "download_date": "2025-08-26T01:50:50.336831",
+  "optimization_type": "REAL_ray_tracing_all_scenes",
+  "total_files_available": 14,
+  "downloaded_successfully": 14,
+  "failed_downloads": 0,
+  "scenes_downloaded": [
+    "complex",
+    "basic"
+  ],
+  "outputs_per_scene": 7,
+  "output_types": {
+    "progress_ALL_FRAMES.gif": "Optimization progress - every iteration (25 frames)",
+    "displays.png": "What each display shows (8 focal planes)",
+    "eye_views.png": "What eye sees for each display (8 views)",
+    "focal_sweep_through_display.gif": "Focal sweep through optimized display system (10 frames)",
+    "eye_movement_through_display.gif": "Eye movement through optimized display system (15 frames)",
+    "REAL_scene_focal_sweep.gif": "Focal sweep of real scene directly (10 frames) - FOR COMPARISON",
+    "REAL_scene_eye_movement.gif": "Eye movement of real scene directly (15 frames) - FOR COMPARISON"
+  },
+  "comparison_analysis": {
+    "display_vs_scene": "Compare display system performance against real scene",
+    "focal_effects": "See how focal length affects both display and real scene",
+    "eye_movement_effects": "See parallax in both display and real scene"
+  }
+}
