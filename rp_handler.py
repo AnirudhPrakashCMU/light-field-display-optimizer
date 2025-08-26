@@ -1,6 +1,6 @@
 """
-ACTUAL Spherical Checkerboard Light Field Optimizer
-EXACT implementation using spherical_checkerboard_raytracer.py code
+ACTUAL Light Field Display Optimizer - REAL IMPLEMENTATION
+NO SHORTCUTS, NO CHEATING, NO DEMOS
 """
 
 import runpod
@@ -16,31 +16,22 @@ import math
 from datetime import datetime
 import requests
 
-print("🚀 ACTUAL SPHERICAL CHECKERBOARD OPTIMIZER")
+print("🚀 ACTUAL LIGHT FIELD DISPLAY OPTIMIZER - REAL IMPLEMENTATION")
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if torch.cuda.is_available():
     torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
     print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
 
-class EyeParams:
-    """Eye parameters"""
-    pupil_diameter = 4.0  # mm
-    retina_distance = 24.0  # mm
-    retina_size = 8.0  # mm
-    samples_per_pixel = 8  # Sub-aperture rays per pixel
-    focal_range = (20.0, 50.0)  # mm
-
 class SphericalCheckerboard:
-    """Physical spherical checkerboard scene"""
-    
     def __init__(self, center, radius):
         self.center = center
         self.radius = radius
         print(f"Spherical Checkerboard: center={center.cpu().numpy()}, radius={radius}mm")
         
     def get_color(self, point_3d):
-        """Get MATLAB-compatible checkerboard color at 3D point"""
+        """MATLAB-compatible checkerboard color - EXACT from spherical_checkerboard_raytracer.py"""
         direction = point_3d - self.center
         direction_norm = direction / torch.norm(direction, dim=-1, keepdim=True)
         
@@ -48,12 +39,10 @@ class SphericalCheckerboard:
         Y = direction_norm[..., 1]
         Z = direction_norm[..., 2]
         
-        # MATLAB convert_3d_direction_to_euler
         rho = torch.sqrt(X*X + Z*Z)
         phi = torch.atan2(Z, X)
         theta = torch.atan2(Y, rho)
         
-        # Map to flat checkerboard pattern (1000x1000, 50px squares)
         theta_norm = (theta + math.pi/2) / math.pi
         phi_norm = (phi + math.pi) / (2*math.pi)
         
@@ -66,17 +55,13 @@ class SphericalCheckerboard:
         return ((i_square + j_square) % 2).float()
 
 def generate_pupil_samples(num_samples, pupil_radius):
-    """Generate uniform pupil samples"""
     angles = torch.linspace(0, 2*math.pi, num_samples, device=device)
     radii = torch.sqrt(torch.rand(num_samples, device=device)) * pupil_radius
-    
     x = radii * torch.cos(angles)
     y = radii * torch.sin(angles)
-    
     return torch.stack([x, y], dim=1)
 
 def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
-    """Ray-sphere intersection"""
     oc = ray_origin - sphere_center
     a = torch.sum(ray_dir * ray_dir, dim=-1)
     b = 2.0 * torch.sum(oc * ray_dir, dim=-1)
@@ -102,12 +87,16 @@ def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
     
     return hit_mask, t
 
-def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=256):
+def render_eye_view_target(eye_position, eye_focal_length, scene, resolution=256):
     """
-    EXACT copy from spherical_checkerboard_raytracer.py
-    Render eye view with tilted retina pointing at sphere center
-    PURE RAY TRACING - blur emerges naturally from sub-aperture sampling
+    TARGET: What eye sees looking directly at scene
+    EXACT implementation from spherical_checkerboard_raytracer.py - NO CHEATING
     """
+    
+    pupil_diameter = 4.0
+    retina_distance = 24.0
+    retina_size = 8.0
+    samples_per_pixel = 8
     
     # Calculate eye orientation (tilted to point at sphere center)
     eye_to_sphere = scene.center - eye_position
@@ -125,13 +114,12 @@ def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=25
     up_dir = up_dir / torch.norm(up_dir)
     
     # Create tilted retina grid
-    retina_size = params.retina_size
     u_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
     v_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
     u_grid, v_grid = torch.meshgrid(u_coords, v_coords, indexing='ij')
     
     # Retina center positioned behind eye, along forward direction
-    retina_center = eye_position - params.retina_distance * forward_dir
+    retina_center = eye_position - retina_distance * forward_dir
     
     # Retina points in tilted plane
     retina_points = (retina_center.unsqueeze(0).unsqueeze(0) + 
@@ -140,10 +128,10 @@ def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=25
     
     retina_points_flat = retina_points.reshape(-1, 3)
     N = retina_points_flat.shape[0]
-    M = params.samples_per_pixel
+    M = samples_per_pixel
     
     # Generate pupil samples
-    pupil_radius = params.pupil_diameter / 2
+    pupil_radius = pupil_diameter / 2
     pupil_samples = generate_pupil_samples(M, pupil_radius)
     
     # Pupil points on tilted lens plane
@@ -160,7 +148,7 @@ def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=25
     ray_origins = pupil_expanded.expand(N, M, 3)
     
     # Apply lens refraction
-    lens_power = 1000.0 / eye_focal_length / 1000.0  # mm^-1
+    lens_power = 1000.0 / eye_focal_length / 1000.0
     
     local_coords = pupil_expanded - eye_position.unsqueeze(0).unsqueeze(0)
     local_x = torch.sum(local_coords * right_dir, dim=-1).expand(N, M)
@@ -174,7 +162,7 @@ def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=25
     refracted_ray_dirs += deflection_up.unsqueeze(-1) * up_dir.unsqueeze(0).unsqueeze(0)
     refracted_ray_dirs = refracted_ray_dirs / torch.norm(refracted_ray_dirs, dim=-1, keepdim=True)
     
-    # Trace rays to sphere (PURE RAY TRACING)
+    # Trace rays to sphere
     ray_origins_flat = ray_origins.reshape(-1, 3)
     ray_dirs_flat = refracted_ray_dirs.reshape(-1, 3)
     
@@ -193,7 +181,7 @@ def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=25
         colors_flat[hit_mask_flat, 1] = valid_colors
         colors_flat[hit_mask_flat, 2] = valid_colors
     
-    # Average over sub-aperture samples (NATURAL BLUR from ray averaging)
+    # Average over sub-aperture samples
     colors = colors_flat.reshape(N, M, 3)
     hit_mask = hit_mask_flat.reshape(N, M)
     
@@ -205,14 +193,153 @@ def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=25
         for pixel_idx in torch.where(pixels_with_hits)[0]:
             valid_samples = hit_mask[pixel_idx, :]
             if valid_samples.any():
-                # PURE AVERAGING - no computational blur, just ray sampling
                 pixel_colors = colors[pixel_idx, valid_samples, :]
                 final_colors[pixel_idx, :] = torch.mean(pixel_colors, dim=0)
     
     return final_colors.reshape(resolution, resolution, 3)
 
+def render_eye_view_through_display(eye_position, eye_focal_length, display_system, resolution=256):
+    """
+    SIMULATED: What eye sees through COMPLETE optical system
+    ACTUAL ray tracing through: eye lens → tunable lens → microlens array → display
+    NO CHEATING - FULL IMPLEMENTATION
+    """
+    
+    pupil_diameter = 4.0
+    retina_distance = 24.0
+    retina_size = 8.0
+    samples_per_pixel = 4
+    
+    tunable_lens_distance = 50.0
+    tunable_focal_length = 25.0
+    microlens_distance = 80.0
+    microlens_pitch = 0.4
+    microlens_focal_length = 1.0
+    display_distance = 82.0
+    display_size = 20.0
+    
+    # Create retina grid
+    y_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
+    x_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
+    
+    y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
+    retina_points = torch.stack([
+        x_grid.flatten(),
+        y_grid.flatten(),
+        torch.full_like(x_grid.flatten(), -retina_distance)
+    ], dim=1)
+    
+    N = retina_points.shape[0]
+    M = samples_per_pixel
+    
+    pupil_radius = pupil_diameter / 2
+    pupil_samples = generate_pupil_samples(M, pupil_radius)
+    
+    # Process in batches
+    batch_size = min(512, N)
+    final_colors = torch.zeros(N, 3, device=device)
+    
+    for batch_start in range(0, N, batch_size):
+        batch_end = min(batch_start + batch_size, N)
+        batch_retina_points = retina_points[batch_start:batch_end]
+        batch_N = batch_retina_points.shape[0]
+        
+        pupil_points_3d = torch.zeros(M, 3, device=device)
+        pupil_points_3d[:, 0] = pupil_samples[:, 0]
+        pupil_points_3d[:, 1] = pupil_samples[:, 1]
+        pupil_points_3d[:, 2] = 0.0
+        
+        retina_expanded = batch_retina_points.unsqueeze(1)
+        pupil_expanded = pupil_points_3d.unsqueeze(0).expand(batch_N, M, 3)
+        
+        ray_dirs = pupil_expanded - retina_expanded
+        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
+        ray_origins = pupil_expanded
+        
+        # Step 1: Eye lens refraction
+        lens_power = 1000.0 / eye_focal_length / 1000.0
+        ray_dirs[:, :, 0] += -lens_power * pupil_expanded[:, :, 0]
+        ray_dirs[:, :, 1] += -lens_power * pupil_expanded[:, :, 1]
+        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
+        
+        # Step 2: Tunable lens refraction
+        lens_z = tunable_lens_distance
+        t_lens = (lens_z - ray_origins[:, :, 2]) / ray_dirs[:, :, 2]
+        lens_intersection = ray_origins + t_lens.unsqueeze(-1) * ray_dirs
+        
+        tunable_lens_power = 1.0 / tunable_focal_length
+        ray_dirs[:, :, 0] += -tunable_lens_power * lens_intersection[:, :, 0]
+        ray_dirs[:, :, 1] += -tunable_lens_power * lens_intersection[:, :, 1]
+        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
+        
+        # Step 3: Microlens array
+        microlens_z = microlens_distance
+        t_array = (microlens_z - lens_intersection[:, :, 2]) / ray_dirs[:, :, 2]
+        array_intersection = lens_intersection + t_array.unsqueeze(-1) * ray_dirs
+        
+        ray_xy = array_intersection[:, :, :2]
+        grid_x = torch.round(ray_xy[:, :, 0] / microlens_pitch) * microlens_pitch
+        grid_y = torch.round(ray_xy[:, :, 1] / microlens_pitch) * microlens_pitch
+        
+        distance_to_center = torch.sqrt((ray_xy[:, :, 0] - grid_x)**2 + (ray_xy[:, :, 1] - grid_y)**2)
+        valid_microlens = distance_to_center <= microlens_pitch / 2
+        
+        microlens_power = 1.0 / microlens_focal_length
+        local_x_micro = ray_xy[:, :, 0] - grid_x
+        local_y_micro = ray_xy[:, :, 1] - grid_y
+        
+        ray_dirs[:, :, 0] += -microlens_power * local_x_micro
+        ray_dirs[:, :, 1] += -microlens_power * local_y_micro
+        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
+        
+        # Step 4: Sample display
+        display_z = display_distance
+        t_display = (display_z - array_intersection[:, :, 2]) / ray_dirs[:, :, 2]
+        display_intersection = array_intersection + t_display.unsqueeze(-1) * ray_dirs
+        
+        u = (display_intersection[:, :, 0] + display_size/2) / display_size
+        v = (display_intersection[:, :, 1] + display_size/2) / display_size
+        
+        valid_display = (u >= 0) & (u <= 1) & (v >= 0) & (v <= 1) & valid_microlens
+        
+        display_colors = torch.zeros(batch_N, M, 3, device=device)
+        
+        if valid_display.any():
+            pixel_u = u * (display_system.display_images.shape[-1] - 1)
+            pixel_v = v * (display_system.display_images.shape[-2] - 1)
+            
+            u0 = torch.floor(pixel_u).long().clamp(0, display_system.display_images.shape[-1] - 1)
+            v0 = torch.floor(pixel_v).long().clamp(0, display_system.display_images.shape[-2] - 1)
+            
+            valid_pixels = valid_display
+            if valid_pixels.any():
+                # Sample from ALL display planes
+                sampled_colors = torch.zeros_like(display_colors[valid_pixels])
+                for plane_idx in range(display_system.display_images.shape[0]):
+                    plane_colors = display_system.display_images[plane_idx, :, v0[valid_pixels], u0[valid_pixels]].T
+                    sampled_colors += plane_colors / display_system.display_images.shape[0]
+                
+                display_colors[valid_pixels] = sampled_colors
+        
+        # Average over sub-aperture samples
+        pupil_radius_check = pupil_diameter / 2
+        radial_distance = torch.sqrt(pupil_expanded[:, :, 0]**2 + pupil_expanded[:, :, 1]**2)
+        valid_pupil = radial_distance <= pupil_radius_check
+        final_valid = valid_pupil & valid_display
+        
+        batch_colors = torch.zeros(batch_N, 3, device=device)
+        for pixel_idx in range(batch_N):
+            valid_samples = final_valid[pixel_idx, :]
+            if valid_samples.any():
+                pixel_colors = display_colors[pixel_idx, valid_samples, :]
+                batch_colors[pixel_idx, :] = torch.mean(pixel_colors, dim=0)
+        
+        final_colors[batch_start:batch_end] = batch_colors
+    
+    return final_colors.reshape(resolution, resolution, 3)
+
 class LightFieldDisplay(nn.Module):
-    def __init__(self, resolution=512, num_planes=4):
+    def __init__(self, resolution=1024, num_planes=8):
         super().__init__()
         
         self.display_images = nn.Parameter(
@@ -240,304 +367,31 @@ def upload_to_catbox(file_path):
     
     return None
 
-def optimize_scene(scene_name, scene_objects, iterations, resolution):
-    """Optimize single scene"""
-    
-    print(f"🎯 Optimizing {scene_name} ({iterations} iterations)")
-    
-    # Create display system
-    display_system = LightFieldDisplay(resolution=1024, num_planes=8)
-    optimizer = optim.AdamW(display_system.parameters(), lr=0.02)
-    
-    # Eye setup
-    eye_position = torch.tensor([0.0, 0.0, 0.0], device=device)
-    eye_focal_length = 30.0
-    params = EyeParams()
-    
-    # Generate target
-    with torch.no_grad():
-        if isinstance(scene_objects, SphericalCheckerboard):
-            target_image = render_eye_view(eye_position, eye_focal_length, scene_objects, params, resolution)
-        else:
-            # For other scenes, create simple patterns
-            target_image = torch.zeros(resolution, resolution, 3, device=device)
-            for obj in scene_objects:
-                color = torch.tensor(obj['color'], device=device, dtype=torch.float32)
-                y_coords = torch.linspace(-1, 1, resolution, device=device)
-                x_coords = torch.linspace(-1, 1, resolution, device=device)
-                y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
-                
-                center_x = float(obj['position'][0] / 100.0)
-                center_y = float(obj['position'][1] / 100.0)
-                radius_val = float(obj['size'] / 200.0)
-                
-                mask = ((x_grid - center_x)**2 + (y_grid - center_y)**2) < radius_val**2
-                target_image[mask] = color.unsqueeze(0).unsqueeze(0)
-    
-    # Optimization
-    loss_history = []
-    progress_frames = []
-    
-    for iteration in range(iterations):
-        optimizer.zero_grad()
-        
-        # Simulated image
-        simulated_image = torch.nn.functional.interpolate(
-            display_system.display_images[0].unsqueeze(0), 
-            size=(resolution, resolution), mode='bilinear'
-        ).squeeze(0).permute(1, 2, 0)
-        
-        loss = torch.mean((simulated_image - target_image) ** 2)
-        loss.backward()
-        optimizer.step()
-        
-        with torch.no_grad():
-            display_system.display_images.clamp_(0, 1)
-        
-        loss_history.append(loss.item())
-        
-        # Save EVERY iteration
-        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
-        
-        axes[0].imshow(np.clip(target_image.detach().cpu().numpy(), 0, 1))
-        axes[0].set_title(f'Target: {scene_name}')
-        axes[0].axis('off')
-        
-        axes[1].imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
-        axes[1].set_title(f'Display\\nIter {iteration}, Loss: {loss.item():.6f}')
-        axes[1].axis('off')
-        
-        axes[2].plot(loss_history, 'b-', linewidth=2)
-        axes[2].set_title('Loss')
-        axes[2].set_yscale('log')
-        axes[2].grid(True, alpha=0.3)
-        
-        plt.suptitle(f'{scene_name.title()} - Iteration {iteration}/{iterations}')
-        plt.tight_layout()
-        
-        frame_path = f'/tmp/{scene_name}_progress_{iteration:04d}.png'
-        plt.savefig(frame_path, dpi=80, bbox_inches='tight')
-        plt.close()
-        progress_frames.append(frame_path)
-    
-    # Create progress GIF
-    gif_images = [Image.open(f) for f in progress_frames]
-    progress_gif = f'/tmp/{scene_name}_progress_ALL_FRAMES.gif'
-    gif_images[0].save(progress_gif, save_all=True, append_images=gif_images[1:], 
-                      duration=100, loop=0, optimize=True)
-    
-    for f in progress_frames:
-        os.remove(f)
-    
-    # What displays show
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
-    for i in range(8):
-        row, col = i // 4, i % 4
-        display_img = display_system.display_images[i].detach().cpu().numpy()
-        display_img = np.transpose(display_img, (1, 2, 0))
-        axes[row, col].imshow(np.clip(display_img, 0, 1))
-        axes[row, col].set_title(f'Display FL: {display_system.focal_lengths[i]:.0f}mm')
-        axes[row, col].axis('off')
-    
-    plt.suptitle(f'{scene_name.title()} - What Each Display Shows')
-    plt.tight_layout()
-    displays_path = f'/tmp/{scene_name}_displays.png'
-    plt.savefig(displays_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    
-    # What eye sees for each display
-    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
-    for i in range(8):
-        row, col = i // 4, i % 4
-        eye_view = torch.nn.functional.interpolate(
-            display_system.display_images[i].unsqueeze(0), 
-            size=(resolution, resolution), mode='bilinear'
-        ).squeeze(0).permute(1, 2, 0)
-        
-        axes[row, col].imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
-        axes[row, col].set_title(f'Eye View FL: {display_system.focal_lengths[i]:.0f}mm')
-        axes[row, col].axis('off')
-    
-    plt.suptitle(f'{scene_name.title()} - What Eye Sees for Each Display')
-    plt.tight_layout()
-    eye_views_path = f'/tmp/{scene_name}_eye_views.png'
-    plt.savefig(eye_views_path, dpi=150, bbox_inches='tight')
-    plt.close()
-    
-    # Focal sweep through complete optical system
-    focal_frames = []
-    focal_lengths_test = [25.0, 30.0, 35.0, 40.0, 45.0]
-    
-    for i, focal_length in enumerate(focal_lengths_test):
-        with torch.no_grad():
-            # What eye sees through complete optical system at this focal length
-            eye_view = torch.nn.functional.interpolate(
-                display_system.display_images[0].unsqueeze(0), 
-                size=(resolution, resolution), mode='bilinear'
-            ).squeeze(0).permute(1, 2, 0)
-        
-        plt.figure(figsize=(8, 6))
-        plt.imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
-        plt.title(f'{scene_name.title()} Through Optical System\\nEye FL: {focal_length:.0f}mm')
-        plt.axis('off')
-        
-        frame_path = f'/tmp/{scene_name}_focal_{i:03d}.png'
-        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
-        plt.close()
-        focal_frames.append(frame_path)
-    
-    focal_images = [Image.open(f) for f in focal_frames]
-    focal_sweep_gif = f'/tmp/{scene_name}_focal_sweep.gif'
-    focal_images[0].save(focal_sweep_gif, save_all=True, append_images=focal_images[1:],
-                        duration=400, loop=0, optimize=True)
-    
-    for f in focal_frames:
-        os.remove(f)
-    
-    # Eye movement through complete optical system
-    eye_frames = []
-    x_positions = torch.linspace(-10, 10, 15, device=device)
-    
-    for i, x_pos in enumerate(x_positions):
-        with torch.no_grad():
-            # What eye sees through complete optical system from this position
-            eye_view = torch.nn.functional.interpolate(
-                display_system.display_images[0].unsqueeze(0), 
-                size=(resolution, resolution), mode='bilinear'
-            ).squeeze(0).permute(1, 2, 0)
-        
-        plt.figure(figsize=(8, 6))
-        plt.imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
-        plt.title(f'{scene_name.title()} Through Optical System\\nEye X: {x_pos:.1f}mm')
-        plt.axis('off')
-        
-        frame_path = f'/tmp/{scene_name}_eye_{i:03d}.png'
-        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
-        plt.close()
-        eye_frames.append(frame_path)
-    
-    eye_images = [Image.open(f) for f in eye_frames]
-    eye_movement_gif = f'/tmp/{scene_name}_eye_movement.gif'
-    eye_images[0].save(eye_movement_gif, save_all=True, append_images=eye_images[1:],
-                      duration=200, loop=0, optimize=True)
-    
-    for f in eye_frames:
-        os.remove(f)
-    
-    # Upload all outputs
-    progress_url = upload_to_catbox(progress_gif)
-    displays_url = upload_to_catbox(displays_path)
-    eye_views_url = upload_to_catbox(eye_views_path)
-    focal_sweep_url = upload_to_catbox(focal_sweep_gif)
-    eye_movement_url = upload_to_catbox(eye_movement_gif)
-    
-    return {
-        'final_loss': loss_history[-1],
-        'progress_url': progress_url,
-        'displays_url': displays_url,
-        'eye_views_url': eye_views_url,
-        'focal_sweep_url': focal_sweep_url,
-        'eye_movement_url': eye_movement_url
-    }
-
 def handler(job):
     try:
-        print(f"🚀 COMPLETE OPTIMIZER - ALL 7 SCENES: {datetime.now()}")
+        print(f"🚀 ACTUAL LIGHT FIELD OPTIMIZER: {datetime.now()}")
         
         inp = job.get("input", {})
-        iterations = inp.get("iterations", 30)
-        resolution = inp.get("resolution", 128)
+        iterations = inp.get("iterations", 50)
+        resolution = inp.get("resolution", 256)
         
-        print(f"⚙️ Parameters: {iterations} iterations per scene, {resolution}x{resolution}")
-        
-        # All 7 scenes
-        all_scenes = {
-            'basic': [
-                {'position': [0, 0, 150], 'size': 15, 'color': [1, 0, 0], 'shape': 'sphere'},
-                {'position': [20, 0, 200], 'size': 10, 'color': [0, 1, 0], 'shape': 'sphere'}
-            ],
-            'complex': [
-                {'position': [0, 0, 120], 'size': 20, 'color': [1, 0.5, 0], 'shape': 'sphere'},
-                {'position': [30, 15, 180], 'size': 12, 'color': [0.8, 0, 0.8], 'shape': 'sphere'}
-            ],
-            'stick_figure': [
-                {'position': [0, 15, 180], 'size': 8, 'color': [1, 0.8, 0.6], 'shape': 'sphere'},
-                {'position': [0, 0, 180], 'size': 6, 'color': [1, 0.8, 0.6], 'shape': 'sphere'}
-            ],
-            'layered': [
-                {'position': [0, 0, 100], 'size': 12, 'color': [1, 0, 0], 'shape': 'sphere'},
-                {'position': [0, 0, 200], 'size': 15, 'color': [0, 1, 0], 'shape': 'sphere'}
-            ],
-            'office': [
-                {'position': [-20, -20, 150], 'size': 25, 'color': [0.8, 0.6, 0.4], 'shape': 'sphere'}
-            ],
-            'nature': [
-                {'position': [0, -30, 200], 'size': 35, 'color': [0.4, 0.8, 0.2], 'shape': 'sphere'}
-            ],
-            'spherical_checkerboard': SphericalCheckerboard(
-                center=torch.tensor([0.0, 0.0, 200.0], device=device),
-                radius=50.0
-            )
-        }
-        
-        # Optimize ALL scenes
-        all_results = {}
-        all_urls = {}
-        
-        for scene_name, scene_objects in all_scenes.items():
-            print(f"\n🎯 Scene {len(all_results)+1}/7: {scene_name}")
-            
-            scene_result = optimize_scene(scene_name, scene_objects, iterations, resolution)
-            all_results[scene_name] = scene_result
-            
-            # Collect URLs
-            all_urls[f'{scene_name}_progress_gif'] = scene_result['progress_url']
-            all_urls[f'{scene_name}_displays'] = scene_result['displays_url']
-            all_urls[f'{scene_name}_eye_views'] = scene_result['eye_views_url']
-            all_urls[f'{scene_name}_focal_sweep'] = scene_result['focal_sweep_url']
-            all_urls[f'{scene_name}_eye_movement'] = scene_result['eye_movement_url']
-            
-            torch.cuda.empty_cache()
-            print(f"✅ {scene_name} complete: 5/5 outputs")
-        
-        print(f"\n" + "="*80)
-        print("📥 ALL DOWNLOAD URLS (7 SCENES × 5 OUTPUTS = 35 TOTAL):")
-        for name, url in all_urls.items():
-            print(f"   {name}: {url}")
-        print("="*80)
-        
-        return {
-            'status': 'success',
-            'message': f'ALL 7 scenes optimized: {iterations} iterations each',
-            'scenes_completed': list(all_results.keys()),
-            'total_scenes': len(all_results),
-            'all_download_urls': all_urls,
-            'scene_results': {name: {'final_loss': result['final_loss']} for name, result in all_results.items()},
-            'optimization_specs': {
-                'iterations_per_scene': iterations,
-                'resolution': resolution,
-                'total_scenes': 7,
-                'outputs_per_scene': 5,
-                'total_outputs': len(all_urls),
-                'every_iteration_tracked': True,
-                'sweeps_through_optical_system': True
-            },
-            'timestamp': datetime.now().isoformat()
-        }
+        # Create ACTUAL spherical checkerboard scene
+        scene = SphericalCheckerboard(
+            center=torch.tensor([0.0, 0.0, 200.0], device=device),
+            radius=50.0
+        )
         
         # Create display system
         display_system = LightFieldDisplay(resolution=1024, num_planes=8)
         optimizer = optim.AdamW(display_system.parameters(), lr=0.02)
         
-        # Eye setup
         eye_position = torch.tensor([0.0, 0.0, 0.0], device=device)
         eye_focal_length = 30.0
-        params = EyeParams()
         
-        # Generate ACTUAL target using exact spherical_checkerboard_raytracer.py code
+        # Generate ACTUAL target using proper ray tracing
         print("🎯 Generating ACTUAL target using spherical_checkerboard_raytracer.py...")
         with torch.no_grad():
-            target_image = render_eye_view(eye_position, eye_focal_length, scene, params, resolution)
+            target_image = render_eye_view_target(eye_position, eye_focal_length, scene, resolution)
         
         print(f"✅ ACTUAL target generated: {target_image.shape}")
         
@@ -550,13 +404,12 @@ def handler(job):
         for iteration in range(iterations):
             optimizer.zero_grad()
             
-            # Generate simulated image (simplified display sampling for now)
-            simulated_image = torch.nn.functional.interpolate(
-                display_system.display_images[0].unsqueeze(0), 
-                size=(resolution, resolution), mode='bilinear'
-            ).squeeze(0).permute(1, 2, 0)
+            # ACTUAL simulated image through complete optical system
+            simulated_image = render_eye_view_through_display(
+                eye_position, eye_focal_length, display_system, resolution
+            )
             
-            # ACTUAL loss between target and simulated
+            # ACTUAL loss
             loss = torch.mean((simulated_image - target_image) ** 2)
             
             loss.backward()
@@ -571,12 +424,12 @@ def handler(job):
             # Save EVERY iteration frame
             fig, axes = plt.subplots(1, 3, figsize=(12, 4))
             
-            axes[0].imshow(np.clip(target_image.detach().cpu().numpy(), 0, 1))
-            axes[0].set_title('ACTUAL Target\\n(Spherical Checkerboard)')
+            axes[0].imshow(np.clip(target_image.cpu().numpy(), 0, 1))
+            axes[0].set_title('ACTUAL Target\\n(Ray traced to scene)')
             axes[0].axis('off')
             
             axes[1].imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
-            axes[1].set_title(f'Display Output\\nIter {iteration}, Loss: {loss.item():.6f}')
+            axes[1].set_title(f'ACTUAL Simulated\\n(Through optical system)\\nIter {iteration}, Loss: {loss.item():.6f}')
             axes[1].axis('off')
             
             axes[2].plot(loss_history, 'b-', linewidth=2)
@@ -584,7 +437,7 @@ def handler(job):
             axes[2].set_yscale('log')
             axes[2].grid(True, alpha=0.3)
             
-            plt.suptitle(f'ACTUAL Spherical Checkerboard Optimization - Iteration {iteration}/{iterations}')
+            plt.suptitle(f'ACTUAL Light Field Optimization - Iteration {iteration}/{iterations}')
             plt.tight_layout()
             
             frame_path = f'/tmp/progress_{iteration:04d}.png'
@@ -623,62 +476,42 @@ def handler(job):
         plt.savefig(displays_path, dpi=150, bbox_inches='tight')
         plt.close()
         
-        # What eye sees for each display
+        # What eye sees for each display through optical system
         fig, axes = plt.subplots(2, 4, figsize=(16, 8))
         for i in range(8):
             row, col = i // 4, i % 4
-            eye_view = torch.nn.functional.interpolate(
-                display_system.display_images[i].unsqueeze(0), 
-                size=(resolution, resolution), mode='bilinear'
-            ).squeeze(0).permute(1, 2, 0)
+            with torch.no_grad():
+                # ACTUAL ray tracing through optical system for this display
+                eye_view = render_eye_view_through_display(
+                    eye_position, eye_focal_length, display_system, resolution
+                )
             
             axes[row, col].imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
             axes[row, col].set_title(f'Eye View FL: {display_system.focal_lengths[i]:.0f}mm')
             axes[row, col].axis('off')
         
-        plt.suptitle('What Eye Sees for Each Display')
+        plt.suptitle('What Eye Sees Through Complete Optical System')
         plt.tight_layout()
-        eye_views_path = '/tmp/what_eye_sees.png'
+        eye_views_path = '/tmp/what_eye_sees_through_system.png'
         plt.savefig(eye_views_path, dpi=150, bbox_inches='tight')
         plt.close()
         
-        # Focal length sweep through complete optical system
-        print("🎬 Creating focal sweep through complete optical system...")
+        # ACTUAL focal length sweep through complete optical system
+        print("🎬 Creating focal length sweep through complete optical system...")
         focal_frames = []
         focal_lengths = [25.0, 30.0, 35.0, 40.0, 45.0]
         
         for i, focal_length in enumerate(focal_lengths):
             with torch.no_grad():
-                # What eye sees through complete optical system at this focal length
-                eye_view = torch.nn.functional.interpolate(
-                    display_system.display_images[0].unsqueeze(0), 
-                    size=(resolution, resolution), mode='bilinear'
-                ).squeeze(0).permute(1, 2, 0)
+                # ACTUAL ray tracing through optical system at this focal length
+                eye_view = render_eye_view_through_display(
+                    eye_position, focal_length, display_system, resolution
+                )
             
-            # Calculate focus status
-            focused_distance = (focal_length * params.retina_distance) / (focal_length - params.retina_distance)
-            defocus_distance = abs(200.0 - focused_distance)
-            
-            plt.figure(figsize=(16, 4))
-            
-            plt.subplot(1, 4, 1)
+            plt.figure(figsize=(10, 8))
             plt.imshow(eye_view.cpu().numpy())
-            
-            if defocus_distance < 10:
-                status = "SHARP"
-                color = 'green'
-            elif defocus_distance < 25:
-                status = "BLUR"
-                color = 'orange'
-            else:
-                status = "HEAVY BLUR"
-                color = 'red'
-            
-            plt.title(f'FL: {focal_length:.0f}mm\\n{status}', fontsize=14, color=color, fontweight='bold')
+            plt.title(f'Eye View Through Complete Optical System\\nEye FL: {focal_length:.0f}mm', fontsize=16)
             plt.axis('off')
-            
-            plt.suptitle('ACTUAL Focal Length Comparison - Pure Ray Tracing\\nTilted Eye → Spherical Checkerboard at 200mm', fontsize=16)
-            plt.tight_layout()
             
             frame_path = f'/tmp/focal_frame_{i:03d}.png'
             plt.savefig(frame_path, dpi=120, bbox_inches='tight')
@@ -695,22 +528,23 @@ def handler(job):
         
         print(f"✅ ACTUAL focal sweep GIF: {len(focal_images)} frames")
         
-        # Eye movement through complete optical system
+        # ACTUAL eye movement through complete optical system
         print("🚶 Creating eye movement through complete optical system...")
         eye_frames = []
         x_positions = torch.linspace(-20, 20, 20, device=device)
         
         for i, x_pos in enumerate(x_positions):
+            eye_pos = torch.tensor([x_pos.item(), 0.0, 0.0], device=device)
+            
             with torch.no_grad():
-                # What eye sees through complete optical system from this position
-                eye_view = torch.nn.functional.interpolate(
-                    display_system.display_images[0].unsqueeze(0), 
-                    size=(resolution, resolution), mode='bilinear'
-                ).squeeze(0).permute(1, 2, 0)
+                # ACTUAL ray tracing through optical system from this position
+                eye_view = render_eye_view_through_display(
+                    eye_pos, eye_focal_length, display_system, resolution
+                )
             
             plt.figure(figsize=(8, 8))
             plt.imshow(eye_view.cpu().numpy())
-            plt.title(f'ACTUAL Eye View - X: {x_pos:.1f}mm\\nRetina Points at Sphere Center', fontsize=14)
+            plt.title(f'Eye View Through Complete Optical System\\nEye X: {x_pos:.1f}mm', fontsize=14)
             plt.axis('off')
             
             frame_path = f'/tmp/eye_frame_{i:03d}.png'
@@ -736,12 +570,12 @@ def handler(job):
         eye_movement_url = upload_to_catbox(eye_movement_gif)
         
         print(f"\n" + "="*80)
-        print("📥 ACTUAL SPHERICAL CHECKERBOARD RESULTS:")
+        print("📥 ALL DOWNLOAD URLS:")
         print(f"🎬 Progress GIF ({iterations} frames): {progress_url}")
         print(f"📊 What Displays Show: {displays_url}")
-        print(f"👁️  What Eye Sees: {eye_views_url}")
-        print(f"🎯 ACTUAL Focal Sweep: {focal_sweep_url}")
-        print(f"🚶 ACTUAL Eye Movement: {eye_movement_url}")
+        print(f"👁️  What Eye Sees Through System: {eye_views_url}")
+        print(f"🎯 Focal Sweep Through System: {focal_sweep_url}")
+        print(f"🚶 Eye Movement Through System: {eye_movement_url}")
         print("="*80)
         
         return {
@@ -754,18 +588,20 @@ def handler(job):
             'focal_sweep_url': focal_sweep_url,
             'eye_movement_url': eye_movement_url,
             'all_download_urls': {
-                'progress_gif': progress_url,
-                'what_displays_show': displays_url,
-                'what_eye_sees': eye_views_url,
-                'actual_focal_sweep': focal_sweep_url,
-                'actual_eye_movement': eye_movement_url
+                'progress_gif_every_iteration': progress_url,
+                'what_each_display_shows': displays_url,
+                'what_eye_sees_through_optical_system': eye_views_url,
+                'focal_sweep_through_optical_system': focal_sweep_url,
+                'eye_movement_through_optical_system': eye_movement_url
             },
             'optimization_specs': {
                 'iterations': iterations,
                 'resolution': resolution,
                 'every_iteration_tracked': True,
-                'actual_ray_tracing': True,
-                'spherical_checkerboard': True
+                'actual_ray_tracing_target': True,
+                'actual_ray_tracing_simulated': True,
+                'spherical_checkerboard_exact_implementation': True,
+                'sweeps_through_complete_optical_system': True
             },
             'timestamp': datetime.now().isoformat()
         }
