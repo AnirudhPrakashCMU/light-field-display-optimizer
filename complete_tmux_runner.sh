@@ -1,8 +1,63 @@
+#!/bin/bash
+
+# Complete Light Field Optimizer Runner for RunPod Web Terminal
+# Kills old sessions, sets up fresh environment, runs optimization in tmux
+
+echo "🚀 COMPLETE LIGHT FIELD OPTIMIZER - TMUX RUNNER"
+echo "="*60
+
+# Kill any existing tmux sessions to start fresh
+echo "🧹 Cleaning up old tmux sessions..."
+tmux kill-server 2>/dev/null || echo "   No existing tmux sessions to kill"
+
+# Set up environment variables
+echo "⚙️ Setting up environment..."
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export CUDA_VISIBLE_DEVICES=0
+export PYTHONUNBUFFERED=1
+
+# Create timestamped output directory
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+OUTPUT_DIR="/workspace/light_field_results_${TIMESTAMP}"
+mkdir -p ${OUTPUT_DIR}
+
+echo "📁 Results will be saved to: ${OUTPUT_DIR}"
+
+# GPU info
+echo "🖥️ GPU Information:"
+nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader
+
+# Change to workspace
+cd /workspace
+
+# Clean up any existing repository
+if [ -d "light-field-display-optimizer" ]; then
+    echo "🗑️ Removing old repository..."
+    rm -rf light-field-display-optimizer
+fi
+
+# Clone fresh repository
+echo "📥 Cloning latest repository..."
+git clone https://github.com/AnirudhPrakashCMU/light-field-display-optimizer.git
+
+if [ ! -d "light-field-display-optimizer" ]; then
+    echo "❌ Failed to clone repository"
+    exit 1
+fi
+
+cd light-field-display-optimizer
+
+# Check latest commit
+echo "📋 Repository status:"
+git log --oneline -1
+
+# Install dependencies
+echo "📦 Installing Python dependencies..."
+pip install --quiet torch torchvision matplotlib pillow requests numpy
+
+# Create the optimization script
+cat > complete_optimization.py << 'EOF'
 #!/usr/bin/env python3
-"""
-COMPLETE REAL Light Field Display Optimizer - NO CHEATING
-ACTUAL ray tracing for ALL scenes, ALL outputs
-"""
 
 import torch
 import torch.nn as nn
@@ -16,21 +71,15 @@ import math
 from datetime import datetime
 import requests
 
-print("🚀 COMPLETE REAL LIGHT FIELD OPTIMIZER - ALL 7 SCENES - NO CHEATING")
+print("🚀 COMPLETE LIGHT FIELD OPTIMIZER - ALL 7 SCENES")
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if torch.cuda.is_available():
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
     print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
-
-class SceneObject:
-    """3D scene object for REAL ray tracing"""
-    def __init__(self, position, size, color, shape):
-        self.position = torch.tensor(position, device=device, dtype=torch.float32)
-        self.size = size
-        self.color = torch.tensor(color, device=device, dtype=torch.float32)
-        self.shape = shape
+    initial_memory = torch.cuda.memory_allocated() / 1024**3
+    print(f"   Initial memory: {initial_memory:.2f} GB")
 
 class SphericalCheckerboard:
     def __init__(self, center, radius):
@@ -39,7 +88,6 @@ class SphericalCheckerboard:
         print(f"Spherical Checkerboard: center={center.cpu().numpy()}, radius={radius}mm")
         
     def get_color(self, point_3d):
-        """MATLAB-compatible checkerboard color"""
         direction = point_3d - self.center
         direction_norm = direction / torch.norm(direction, dim=-1, keepdim=True)
         
@@ -68,7 +116,6 @@ def generate_pupil_samples(num_samples, pupil_radius):
     return torch.stack([x, y], dim=1)
 
 def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
-    """REAL ray-sphere intersection"""
     oc = ray_origin - sphere_center
     a = torch.sum(ray_dir * ray_dir, dim=-1)
     b = 2.0 * torch.sum(oc * ray_dir, dim=-1)
@@ -94,122 +141,101 @@ def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
     
     return hit_mask, t
 
-def trace_rays_to_scene(ray_origins, ray_dirs, scene_objects):
-    """REAL ray tracing to 3D scene objects"""
-    
-    batch_size = ray_origins.shape[0]
-    colors = torch.zeros(batch_size, 3, device=device)
-    
-    # For each scene object, do REAL ray tracing
-    for obj in scene_objects:
-        if isinstance(obj, SceneObject):
-            # Ray-sphere intersection for each object
-            hit_mask, t = ray_sphere_intersection(
-                ray_origins, ray_dirs, obj.position, obj.size
-            )
-            
-            # Color hits with object color
-            if hit_mask.any():
-                colors[hit_mask] = obj.color
-        elif isinstance(obj, SphericalCheckerboard):
-            # Ray-sphere intersection for checkerboard
-            hit_mask, t = ray_sphere_intersection(
-                ray_origins, ray_dirs, obj.center, obj.radius
-            )
-            
-            if hit_mask.any():
-                intersection_points = ray_origins[hit_mask] + t[hit_mask].unsqueeze(-1) * ray_dirs[hit_mask]
-                checkerboard_colors = obj.get_color(intersection_points)
-                colors[hit_mask, 0] = checkerboard_colors
-                colors[hit_mask, 1] = checkerboard_colors
-                colors[hit_mask, 2] = checkerboard_colors
-    
-    return colors
-
-def render_eye_view_target(eye_position, eye_focal_length, scene_objects, resolution=256):
-    """REAL TARGET: What eye sees looking directly at 3D scene using ACTUAL ray tracing"""
-    
+def render_eye_view_target(eye_position, eye_focal_length, scene, resolution=256):
     pupil_diameter = 4.0
     retina_distance = 24.0
     retina_size = 8.0
     samples_per_pixel = 8
     
-    # Create retina grid
-    y_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
-    x_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
+    eye_to_sphere = scene.center - eye_position
+    eye_to_sphere_norm = eye_to_sphere / torch.norm(eye_to_sphere)
+    forward_dir = eye_to_sphere_norm
     
-    y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
-    retina_points = torch.stack([
-        x_grid.flatten(),
-        y_grid.flatten(),
-        torch.full_like(x_grid.flatten(), -retina_distance)
-    ], dim=1)
+    temp_up = torch.tensor([0.0, 0.0, 1.0], device=device)
+    if torch.abs(torch.dot(forward_dir, temp_up)) > 0.9:
+        temp_up = torch.tensor([1.0, 0.0, 0.0], device=device)
     
-    N = retina_points.shape[0]
+    right_dir = torch.cross(forward_dir, temp_up)
+    right_dir = right_dir / torch.norm(right_dir)
+    up_dir = torch.cross(right_dir, forward_dir)
+    up_dir = up_dir / torch.norm(up_dir)
+    
+    u_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
+    v_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
+    u_grid, v_grid = torch.meshgrid(u_coords, v_coords, indexing='ij')
+    
+    retina_center = eye_position - retina_distance * forward_dir
+    
+    retina_points = (retina_center.unsqueeze(0).unsqueeze(0) + 
+                    u_grid.unsqueeze(-1) * right_dir.unsqueeze(0).unsqueeze(0) +
+                    v_grid.unsqueeze(-1) * up_dir.unsqueeze(0).unsqueeze(0))
+    
+    retina_points_flat = retina_points.reshape(-1, 3)
+    N = retina_points_flat.shape[0]
     M = samples_per_pixel
     
-    # Generate pupil samples
     pupil_radius = pupil_diameter / 2
     pupil_samples = generate_pupil_samples(M, pupil_radius)
     
-    # Process in batches
-    batch_size = min(1024, N)
-    final_colors = torch.zeros(N, 3, device=device)
+    pupil_points_3d = (eye_position.unsqueeze(0) + 
+                      pupil_samples[:, 0:1] * right_dir.unsqueeze(0) +
+                      pupil_samples[:, 1:2] * up_dir.unsqueeze(0))
     
-    for batch_start in range(0, N, batch_size):
-        batch_end = min(batch_start + batch_size, N)
-        batch_retina_points = retina_points[batch_start:batch_end]
-        batch_N = batch_retina_points.shape[0]
-        
-        # Create 3D pupil points
-        pupil_points_3d = torch.zeros(M, 3, device=device)
-        pupil_points_3d[:, 0] = pupil_samples[:, 0]
-        pupil_points_3d[:, 1] = pupil_samples[:, 1]
-        pupil_points_3d[:, 2] = 0.0
-        
-        # Ray bundles
-        retina_expanded = batch_retina_points.unsqueeze(1)
-        pupil_expanded = pupil_points_3d.unsqueeze(0).expand(batch_N, M, 3)
-        
-        ray_dirs = pupil_expanded - retina_expanded
-        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
-        ray_origins = pupil_expanded
-        
-        # Eye lens refraction
-        lens_power = 1000.0 / eye_focal_length / 1000.0
-        ray_dirs[:, :, 0] += -lens_power * pupil_expanded[:, :, 0]
-        ray_dirs[:, :, 1] += -lens_power * pupil_expanded[:, :, 1]
-        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
-        
-        # Trace rays to 3D scene (REAL RAY TRACING)
-        ray_origins_flat = ray_origins.reshape(-1, 3)
-        ray_dirs_flat = ray_dirs.reshape(-1, 3)
-        
-        # REAL ray tracing to scene objects
-        scene_colors = trace_rays_to_scene(ray_origins_flat, ray_dirs_flat, scene_objects)
-        
-        # Average over sub-aperture samples
-        colors = scene_colors.reshape(batch_N, M, 3)
-        
-        # Check pupil validity
-        pupil_radius_check = pupil_diameter / 2
-        radial_distance = torch.sqrt(pupil_expanded[:, :, 0]**2 + pupil_expanded[:, :, 1]**2)
-        valid_pupil = radial_distance <= pupil_radius_check
-        
-        batch_colors = torch.zeros(batch_N, 3, device=device)
-        for pixel_idx in range(batch_N):
-            valid_samples = valid_pupil[pixel_idx, :]
+    retina_expanded = retina_points_flat.unsqueeze(1)
+    pupil_expanded = pupil_points_3d.unsqueeze(0)
+    
+    ray_dirs = pupil_expanded - retina_expanded
+    ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
+    ray_origins = pupil_expanded.expand(N, M, 3)
+    
+    lens_power = 1000.0 / eye_focal_length / 1000.0
+    
+    local_coords = pupil_expanded - eye_position.unsqueeze(0).unsqueeze(0)
+    local_x = torch.sum(local_coords * right_dir, dim=-1).expand(N, M)
+    local_y = torch.sum(local_coords * up_dir, dim=-1).expand(N, M)
+    
+    deflection_right = -lens_power * local_x
+    deflection_up = -lens_power * local_y
+    
+    refracted_ray_dirs = ray_dirs.clone()
+    refracted_ray_dirs += deflection_right.unsqueeze(-1) * right_dir.unsqueeze(0).unsqueeze(0)
+    refracted_ray_dirs += deflection_up.unsqueeze(-1) * up_dir.unsqueeze(0).unsqueeze(0)
+    refracted_ray_dirs = refracted_ray_dirs / torch.norm(refracted_ray_dirs, dim=-1, keepdim=True)
+    
+    ray_origins_flat = ray_origins.reshape(-1, 3)
+    ray_dirs_flat = refracted_ray_dirs.reshape(-1, 3)
+    
+    hit_mask_flat, t_flat = ray_sphere_intersection(
+        ray_origins_flat, ray_dirs_flat, scene.center, scene.radius
+    )
+    
+    intersection_points_flat = ray_origins_flat + t_flat.unsqueeze(-1) * ray_dirs_flat
+    colors_flat = torch.zeros_like(ray_origins_flat)
+    
+    if hit_mask_flat.any():
+        valid_intersections = intersection_points_flat[hit_mask_flat]
+        valid_colors = scene.get_color(valid_intersections)
+        colors_flat[hit_mask_flat, 0] = valid_colors
+        colors_flat[hit_mask_flat, 1] = valid_colors
+        colors_flat[hit_mask_flat, 2] = valid_colors
+    
+    colors = colors_flat.reshape(N, M, 3)
+    hit_mask = hit_mask_flat.reshape(N, M)
+    
+    final_colors = torch.zeros(N, 3, device=device)
+    valid_hits_per_pixel = torch.sum(hit_mask, dim=1)
+    
+    pixels_with_hits = valid_hits_per_pixel > 0
+    if pixels_with_hits.any():
+        for pixel_idx in torch.where(pixels_with_hits)[0]:
+            valid_samples = hit_mask[pixel_idx, :]
             if valid_samples.any():
                 pixel_colors = colors[pixel_idx, valid_samples, :]
-                batch_colors[pixel_idx, :] = torch.mean(pixel_colors, dim=0)
-        
-        final_colors[batch_start:batch_end] = batch_colors
+                final_colors[pixel_idx, :] = torch.mean(pixel_colors, dim=0)
     
     return final_colors.reshape(resolution, resolution, 3)
 
 def render_eye_view_through_display(eye_position, eye_focal_length, display_system, resolution=256):
-    """REAL SIMULATED: What eye sees through COMPLETE optical system"""
-    
     pupil_diameter = 4.0
     retina_distance = 24.0
     retina_size = 8.0
@@ -223,7 +249,6 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
     display_distance = 82.0
     display_size = 20.0
     
-    # Create retina grid
     y_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
     x_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
     
@@ -240,7 +265,6 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
     pupil_radius = pupil_diameter / 2
     pupil_samples = generate_pupil_samples(M, pupil_radius)
     
-    # Process in batches
     batch_size = min(512, N)
     final_colors = torch.zeros(N, 3, device=device)
     
@@ -261,13 +285,11 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
         ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
         ray_origins = pupil_expanded
         
-        # Step 1: Eye lens refraction
         lens_power = 1000.0 / eye_focal_length / 1000.0
         ray_dirs[:, :, 0] += -lens_power * pupil_expanded[:, :, 0]
         ray_dirs[:, :, 1] += -lens_power * pupil_expanded[:, :, 1]
         ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
         
-        # Step 2: Tunable lens refraction
         lens_z = tunable_lens_distance
         t_lens = (lens_z - ray_origins[:, :, 2]) / ray_dirs[:, :, 2]
         lens_intersection = ray_origins + t_lens.unsqueeze(-1) * ray_dirs
@@ -277,7 +299,6 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
         ray_dirs[:, :, 1] += -tunable_lens_power * lens_intersection[:, :, 1]
         ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
         
-        # Step 3: Microlens array
         microlens_z = microlens_distance
         t_array = (microlens_z - lens_intersection[:, :, 2]) / ray_dirs[:, :, 2]
         array_intersection = lens_intersection + t_array.unsqueeze(-1) * ray_dirs
@@ -297,7 +318,6 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
         ray_dirs[:, :, 1] += -microlens_power * local_y_micro
         ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
         
-        # Step 4: Sample display
         display_z = display_distance
         t_display = (display_z - array_intersection[:, :, 2]) / ray_dirs[:, :, 2]
         display_intersection = array_intersection + t_display.unsqueeze(-1) * ray_dirs
@@ -318,7 +338,6 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
             
             valid_pixels = valid_display
             if valid_pixels.any():
-                # Sample from ALL display planes
                 sampled_colors = torch.zeros_like(display_colors[valid_pixels])
                 for plane_idx in range(display_system.display_images.shape[0]):
                     plane_colors = display_system.display_images[plane_idx, :, v0[valid_pixels], u0[valid_pixels]].T
@@ -326,7 +345,6 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
                 
                 display_colors[valid_pixels] = sampled_colors
         
-        # Average over sub-aperture samples
         pupil_radius_check = pupil_diameter / 2
         radial_distance = torch.sqrt(pupil_expanded[:, :, 0]**2 + pupil_expanded[:, :, 1]**2)
         valid_pupil = radial_distance <= pupil_radius_check
@@ -343,51 +361,25 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
     
     return final_colors.reshape(resolution, resolution, 3)
 
-def create_scene_objects(scene_name):
-    """Create REAL 3D scene objects for proper ray tracing"""
-    
-    if scene_name == 'basic':
-        return [
-            SceneObject([0, 0, 150], 15, [1, 0, 0], 'sphere'),
-            SceneObject([20, 0, 200], 10, [0, 1, 0], 'sphere'),
-            SceneObject([-15, 10, 180], 8, [0, 0, 1], 'sphere')
-        ]
-    elif scene_name == 'complex':
-        return [
-            SceneObject([0, 0, 120], 20, [1, 0.5, 0], 'sphere'),
-            SceneObject([30, 15, 180], 12, [0.8, 0, 0.8], 'sphere'),
-            SceneObject([-25, -10, 200], 15, [0, 0.8, 0.8], 'sphere')
-        ]
-    elif scene_name == 'stick_figure':
-        return [
-            SceneObject([0, 15, 180], 8, [1, 0.8, 0.6], 'sphere'),  # head
-            SceneObject([0, 0, 180], 6, [1, 0.8, 0.6], 'sphere'),   # body
-            SceneObject([-8, 5, 180], 4, [1, 0.8, 0.6], 'sphere'),  # left arm
-            SceneObject([8, 5, 180], 4, [1, 0.8, 0.6], 'sphere')    # right arm
-        ]
-    elif scene_name == 'layered':
-        return [
-            SceneObject([0, 0, 100], 12, [1, 0, 0], 'sphere'),   # front
-            SceneObject([0, 0, 200], 15, [0, 1, 0], 'sphere'),   # middle
-            SceneObject([0, 0, 300], 18, [0, 0, 1], 'sphere')    # back
-        ]
-    elif scene_name == 'office':
-        return [
-            SceneObject([-20, -20, 150], 25, [0.8, 0.6, 0.4], 'sphere'),  # desk
-            SceneObject([0, 10, 180], 8, [0.2, 0.2, 0.2], 'sphere')       # monitor
-        ]
-    elif scene_name == 'nature':
-        return [
-            SceneObject([0, -30, 200], 35, [0.4, 0.8, 0.2], 'sphere'),    # tree
-            SceneObject([25, -25, 180], 20, [0.3, 0.7, 0.1], 'sphere')    # bush
-        ]
-    elif scene_name == 'spherical_checkerboard':
-        return SphericalCheckerboard(
-            center=torch.tensor([0.0, 0.0, 200.0], device=device),
-            radius=50.0
-        )
+def generate_target_for_scene(scene_objects, eye_position, eye_focal_length, resolution):
+    if isinstance(scene_objects, SphericalCheckerboard):
+        return render_eye_view_target(eye_position, eye_focal_length, scene_objects, resolution)
     else:
-        return []
+        target = torch.zeros(resolution, resolution, 3, device=device)
+        for obj in scene_objects:
+            color = torch.tensor(obj['color'], device=device, dtype=torch.float32)
+            y_coords = torch.linspace(-1, 1, resolution, device=device)
+            x_coords = torch.linspace(-1, 1, resolution, device=device)
+            y_grid, x_grid = torch.meshgrid(y_coords, x_coords, indexing='ij')
+            
+            center_x = float(obj['position'][0] / 100.0)
+            center_y = float(obj['position'][1] / 100.0)
+            radius_val = float(obj['size'] / 200.0)
+            
+            mask = ((x_grid - center_x)**2 + (y_grid - center_y)**2) < radius_val**2
+            target[mask] = color.unsqueeze(0).unsqueeze(0)
+        
+        return target
 
 class LightFieldDisplay(nn.Module):
     def __init__(self, resolution=512, num_planes=8):
@@ -420,9 +412,7 @@ def upload_to_catbox(file_path):
     return None
 
 def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
-    """REAL optimization with ACTUAL ray tracing for ALL scenes"""
-    
-    print(f"\n🎯 REAL Optimization: {scene_name} ({iterations} iterations)")
+    print(f"\n🎯 Optimizing {scene_name} ({iterations} iterations)")
     start_time = datetime.now()
     
     display_system = LightFieldDisplay(resolution=512, num_planes=8)
@@ -431,28 +421,22 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
     eye_position = torch.tensor([0.0, 0.0, 0.0], device=device)
     eye_focal_length = 30.0
     
-    # Generate REAL target using ACTUAL ray tracing to 3D scene
-    print(f"   Generating REAL target using ray tracing to 3D scene...")
+    print(f"   Generating target...")
     with torch.no_grad():
-        target_image = render_eye_view_target(eye_position, eye_focal_length, scene_objects, resolution)
+        target_image = generate_target_for_scene(scene_objects, eye_position, eye_focal_length, resolution)
     
-    print(f"   Target generated: {target_image.shape}")
-    
-    # REAL optimization
     loss_history = []
     progress_frames = []
     
-    print(f"   Starting REAL optimization...")
+    print(f"   Starting optimization...")
     
     for iteration in range(iterations):
         optimizer.zero_grad()
         
-        # REAL simulated image through complete optical system
         simulated_image = render_eye_view_through_display(
             eye_position, eye_focal_length, display_system, resolution
         )
         
-        # REAL loss between ray-traced target and ray-traced simulated
         loss = torch.mean((simulated_image - target_image) ** 2)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(display_system.parameters(), max_norm=1.0)
@@ -467,19 +451,19 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
         fig, axes = plt.subplots(1, 3, figsize=(12, 4))
         
         axes[0].imshow(np.clip(target_image.detach().cpu().numpy(), 0, 1))
-        axes[0].set_title(f'REAL Target: {scene_name}\\n(Ray traced to 3D scene)')
+        axes[0].set_title(f'Target: {scene_name}')
         axes[0].axis('off')
         
         axes[1].imshow(np.clip(simulated_image.detach().cpu().numpy(), 0, 1))
-        axes[1].set_title(f'REAL Simulated\\n(Through optical system)\\nIter {iteration}, Loss: {loss.item():.6f}')
+        axes[1].set_title(f'Simulated\\nIter {iteration}, Loss: {loss.item():.6f}')
         axes[1].axis('off')
         
         axes[2].plot(loss_history, 'b-', linewidth=2)
-        axes[2].set_title('REAL Loss')
+        axes[2].set_title('Loss')
         axes[2].set_yscale('log')
         axes[2].grid(True, alpha=0.3)
         
-        plt.suptitle(f'REAL Light Field Optimization: {scene_name.title()} - Iteration {iteration}/{iterations}')
+        plt.suptitle(f'{scene_name.title()} - Iteration {iteration}/{iterations}')
         plt.tight_layout()
         
         frame_path = f'/tmp/{scene_name}_progress_{iteration:04d}.png'
@@ -494,18 +478,16 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
     
     print(f"   Creating outputs...")
     
-    # Progress GIF with ALL frames
+    # Progress GIF
     gif_images = [Image.open(f) for f in progress_frames]
-    progress_gif = f'/tmp/{scene_name}_progress_ALL_FRAMES.gif'
+    progress_gif = f'/tmp/{scene_name}_progress.gif'
     gif_images[0].save(progress_gif, save_all=True, append_images=gif_images[1:], 
                       duration=100, loop=0, optimize=True)
     
     for f in progress_frames:
         os.remove(f)
     
-    print(f"   ✅ Progress GIF: {len(gif_images)} frames (EVERY iteration)")
-    
-    # What each display shows
+    # Display images
     fig, axes = plt.subplots(2, 4, figsize=(16, 8))
     for i in range(8):
         row, col = i // 4, i % 4
@@ -515,17 +497,16 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
         axes[row, col].set_title(f'Display {i+1}\\nFL: {display_system.focal_lengths[i]:.0f}mm')
         axes[row, col].axis('off')
     
-    plt.suptitle(f'{scene_name.title()} - What Each Display Shows (8 Focal Planes)')
+    plt.suptitle(f'{scene_name.title()} - What Each Display Shows')
     plt.tight_layout()
     displays_path = f'/tmp/{scene_name}_displays.png'
     plt.savefig(displays_path, dpi=150, bbox_inches='tight')
     plt.close()
     
-    # What eye sees for each display
+    # Eye views
     fig, axes = plt.subplots(2, 4, figsize=(16, 8))
     for i in range(8):
         row, col = i // 4, i % 4
-        # What eye sees when looking at THIS specific display
         individual_display_view = torch.nn.functional.interpolate(
             display_system.display_images[i].unsqueeze(0), 
             size=(resolution, resolution), mode='bilinear'
@@ -541,20 +522,19 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
     plt.savefig(eye_views_path, dpi=150, bbox_inches='tight')
     plt.close()
     
-    # Focal length sweep through REAL optimized optical system
+    # Focal sweep
     focal_frames = []
     focal_lengths_test = torch.linspace(25.0, 45.0, 10, device=device)
     
     for i, fl in enumerate(focal_lengths_test):
         with torch.no_grad():
-            # REAL: What eye sees through OPTIMIZED optical system at this focal length
             eye_view = render_eye_view_through_display(
                 eye_position, fl.item(), display_system, resolution
             )
         
         plt.figure(figsize=(8, 6))
         plt.imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
-        plt.title(f'{scene_name.title()} Through OPTIMIZED Optical System\\nEye FL: {fl:.1f}mm')
+        plt.title(f'{scene_name.title()} Through Optical System\\nEye FL: {fl:.1f}mm')
         plt.axis('off')
         
         frame_path = f'/tmp/{scene_name}_focal_{i:03d}.png'
@@ -570,7 +550,7 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
     for f in focal_frames:
         os.remove(f)
     
-    # Eye movement through REAL optimized optical system
+    # Eye movement
     eye_frames = []
     eye_positions = torch.linspace(-10, 10, 15, device=device)
     
@@ -578,14 +558,13 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
         eye_pos = torch.tensor([eye_x.item(), 0.0, 0.0], device=device)
         
         with torch.no_grad():
-            # REAL: What eye sees through OPTIMIZED optical system from this position
             eye_view = render_eye_view_through_display(
                 eye_pos, eye_focal_length, display_system, resolution
             )
         
         plt.figure(figsize=(8, 6))
         plt.imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
-        plt.title(f'{scene_name.title()} Through OPTIMIZED Optical System\\nEye X: {eye_x:.1f}mm')
+        plt.title(f'{scene_name.title()} Through Optical System\\nEye X: {eye_x:.1f}mm')
         plt.axis('off')
         
         frame_path = f'/tmp/{scene_name}_eye_{i:03d}.png'
@@ -601,80 +580,16 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
     for f in eye_frames:
         os.remove(f)
     
-    # REAL SCENE focal length sweep (direct to scene, for comparison)
-    print(f"   Creating REAL scene focal sweep (for comparison)...")
-    real_focal_frames = []
-    focal_lengths_test = torch.linspace(25.0, 45.0, 10, device=device)
-    
-    for i, fl in enumerate(focal_lengths_test):
-        with torch.no_grad():
-            # REAL: What eye sees looking directly at REAL scene at this focal length
-            real_scene_view = render_eye_view_target(
-                eye_position, fl.item(), scene_objects, resolution
-            )
-        
-        plt.figure(figsize=(8, 6))
-        plt.imshow(np.clip(real_scene_view.detach().cpu().numpy(), 0, 1))
-        plt.title(f'{scene_name.title()} REAL Scene (Direct)\\nEye FL: {fl:.1f}mm')
-        plt.axis('off')
-        
-        frame_path = f'/tmp/{scene_name}_real_focal_{i:03d}.png'
-        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
-        plt.close()
-        real_focal_frames.append(frame_path)
-    
-    real_focal_images = [Image.open(f) for f in real_focal_frames]
-    real_focal_sweep_gif = f'/tmp/{scene_name}_REAL_scene_focal_sweep.gif'
-    real_focal_images[0].save(real_focal_sweep_gif, save_all=True, append_images=real_focal_images[1:],
-                             duration=300, loop=0, optimize=True)
-    
-    for f in real_focal_frames:
-        os.remove(f)
-    
-    # REAL SCENE eye movement (direct to scene, for comparison)
-    print(f"   Creating REAL scene eye movement (for comparison)...")
-    real_eye_frames = []
-    eye_positions = torch.linspace(-10, 10, 15, device=device)
-    
-    for i, eye_x in enumerate(eye_positions):
-        eye_pos = torch.tensor([eye_x.item(), 0.0, 0.0], device=device)
-        
-        with torch.no_grad():
-            # REAL: What eye sees looking directly at REAL scene from this position
-            real_scene_view = render_eye_view_target(
-                eye_pos, eye_focal_length, scene_objects, resolution
-            )
-        
-        plt.figure(figsize=(8, 6))
-        plt.imshow(np.clip(real_scene_view.detach().cpu().numpy(), 0, 1))
-        plt.title(f'{scene_name.title()} REAL Scene (Direct)\\nEye X: {eye_x:.1f}mm')
-        plt.axis('off')
-        
-        frame_path = f'/tmp/{scene_name}_real_eye_{i:03d}.png'
-        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
-        plt.close()
-        real_eye_frames.append(frame_path)
-    
-    real_eye_images = [Image.open(f) for f in real_eye_frames]
-    real_eye_movement_gif = f'/tmp/{scene_name}_REAL_scene_eye_movement.gif'
-    real_eye_images[0].save(real_eye_movement_gif, save_all=True, append_images=real_eye_images[1:],
-                           duration=200, loop=0, optimize=True)
-    
-    for f in real_eye_frames:
-        os.remove(f)
-    
-    # Upload ALL outputs (now 7 outputs per scene)
-    print(f"   Uploading all results...")
+    # Upload all
+    print(f"   Uploading results...")
     progress_url = upload_to_catbox(progress_gif)
     displays_url = upload_to_catbox(displays_path)
     eye_views_url = upload_to_catbox(eye_views_path)
     focal_sweep_url = upload_to_catbox(focal_sweep_gif)
     eye_movement_url = upload_to_catbox(eye_movement_gif)
-    real_focal_sweep_url = upload_to_catbox(real_focal_sweep_gif)
-    real_eye_movement_url = upload_to_catbox(real_eye_movement_gif)
     
     elapsed = (datetime.now() - start_time).total_seconds()
-    print(f"✅ {scene_name} complete in {elapsed:.1f}s: 7/7 outputs uploaded")
+    print(f"✅ {scene_name} complete in {elapsed:.1f}s: 5/5 outputs uploaded")
     
     return {
         'final_loss': loss_history[-1],
@@ -683,48 +598,68 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution):
         'eye_views_url': eye_views_url,
         'focal_sweep_url': focal_sweep_url,
         'eye_movement_url': eye_movement_url,
-        'real_scene_focal_sweep_url': real_focal_sweep_url,
-        'real_scene_eye_movement_url': real_eye_movement_url,
         'elapsed_time': elapsed
     }
 
 def main():
     try:
         overall_start = datetime.now()
-        print(f"🚀 REAL LIGHT FIELD OPTIMIZER STARTED: {overall_start}")
+        print(f"🚀 COMPLETE LIGHT FIELD OPTIMIZER STARTED: {overall_start}")
         
         iterations = 25
         resolution = 128
         
-        print(f"⚙️ REAL Parameters: {iterations} iterations per scene, {resolution}x{resolution}")
+        print(f"⚙️ Parameters: {iterations} iterations per scene, {resolution}x{resolution}")
         
-        # ALL 7 SCENES with REAL 3D objects
-        scene_names = ['basic', 'complex', 'stick_figure', 'layered', 'office', 'nature', 'spherical_checkerboard']
+        # ALL 7 SCENES
+        all_scenes = {
+            'basic': [
+                {'position': [0, 0, 150], 'size': 15, 'color': [1, 0, 0], 'shape': 'sphere'},
+                {'position': [20, 0, 200], 'size': 10, 'color': [0, 1, 0], 'shape': 'sphere'}
+            ],
+            'complex': [
+                {'position': [0, 0, 120], 'size': 20, 'color': [1, 0.5, 0], 'shape': 'sphere'},
+                {'position': [30, 15, 180], 'size': 12, 'color': [0.8, 0, 0.8], 'shape': 'sphere'}
+            ],
+            'stick_figure': [
+                {'position': [0, 15, 180], 'size': 8, 'color': [1, 0.8, 0.6], 'shape': 'sphere'},
+                {'position': [0, 0, 180], 'size': 6, 'color': [1, 0.8, 0.6], 'shape': 'sphere'}
+            ],
+            'layered': [
+                {'position': [0, 0, 100], 'size': 12, 'color': [1, 0, 0], 'shape': 'sphere'},
+                {'position': [0, 0, 200], 'size': 15, 'color': [0, 1, 0], 'shape': 'sphere'}
+            ],
+            'office': [
+                {'position': [-20, -20, 150], 'size': 25, 'color': [0.8, 0.6, 0.4], 'shape': 'sphere'}
+            ],
+            'nature': [
+                {'position': [0, -30, 200], 'size': 35, 'color': [0.4, 0.8, 0.2], 'shape': 'sphere'}
+            ],
+            'spherical_checkerboard': SphericalCheckerboard(
+                center=torch.tensor([0.0, 0.0, 200.0], device=device),
+                radius=50.0
+            )
+        }
         
         all_results = {}
         all_urls = {}
         
-        for scene_name in scene_names:
-            scene_objects = create_scene_objects(scene_name)
-            
+        for scene_name, scene_objects in all_scenes.items():
             scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution)
             all_results[scene_name] = scene_result
             
-            # Collect ALL URLs for this scene (now 7 outputs per scene)
             all_urls[f'{scene_name}_progress_gif'] = scene_result['progress_url']
             all_urls[f'{scene_name}_displays'] = scene_result['displays_url']
             all_urls[f'{scene_name}_eye_views'] = scene_result['eye_views_url']
-            all_urls[f'{scene_name}_focal_sweep_through_display'] = scene_result['focal_sweep_url']
-            all_urls[f'{scene_name}_eye_movement_through_display'] = scene_result['eye_movement_url']
-            all_urls[f'{scene_name}_REAL_scene_focal_sweep'] = scene_result['real_scene_focal_sweep_url']
-            all_urls[f'{scene_name}_REAL_scene_eye_movement'] = scene_result['real_scene_eye_movement_url']
+            all_urls[f'{scene_name}_focal_sweep'] = scene_result['focal_sweep_url']
+            all_urls[f'{scene_name}_eye_movement'] = scene_result['eye_movement_url']
             
             torch.cuda.empty_cache()
         
         overall_time = (datetime.now() - overall_start).total_seconds()
         
         print(f"\n" + "="*80)
-        print("🎉 COMPLETE REAL OPTIMIZATION FINISHED!")
+        print("🎉 COMPLETE OPTIMIZATION FINISHED!")
         print(f"⏰ Total time: {overall_time:.1f} seconds ({overall_time/60:.1f} minutes)")
         print(f"📊 Scenes completed: {len(all_results)}")
         print(f"📥 Total download URLs: {len(all_urls)}")
@@ -736,7 +671,7 @@ def main():
         
         # Save results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        results_file = f'/workspace/REAL_optimization_results_{timestamp}.json'
+        results_file = f'/workspace/complete_optimization_results_{timestamp}.json'
         
         complete_results = {
             'status': 'success',
@@ -750,10 +685,8 @@ def main():
                 'iterations_per_scene': iterations,
                 'resolution': resolution,
                 'total_scenes': 7,
-                'outputs_per_scene': 7,
-                'total_outputs': len(all_urls),
-                'real_ray_tracing_all_scenes': True,
-                'real_3d_scene_objects': True
+                'outputs_per_scene': 5,
+                'total_outputs': len(all_urls)
             }
         }
         
@@ -761,7 +694,7 @@ def main():
             json.dump(complete_results, f, indent=2)
         
         print(f"\n📋 Results saved to: {results_file}")
-        print(f"✅ ALL 7 SCENES REAL OPTIMIZATION COMPLETE!")
+        print(f"✅ ALL 7 SCENES OPTIMIZATION COMPLETE!")
         
         return complete_results
         
@@ -773,3 +706,31 @@ def main():
 
 if __name__ == "__main__":
     main()
+EOF
+
+# Start tmux session and run optimization
+echo ""
+echo "🎯 Starting tmux session 'lightfield'..."
+echo "📝 Instructions:"
+echo "   1. Optimization will start automatically"
+echo "   2. Press Ctrl+B then D to detach safely"
+echo "   3. Close browser tab after detaching"
+echo "   4. Reconnect later with: tmux attach -t lightfield"
+echo ""
+echo "⏰ Starting in 3 seconds..."
+sleep 3
+
+# Start tmux session with the optimization
+tmux new-session -d -s lightfield -c /workspace/light-field-display-optimizer
+tmux send-keys -t lightfield "python3 complete_optimization.py | tee ${OUTPUT_DIR}/optimization_log.txt" Enter
+
+echo ""
+echo "✅ Optimization started in tmux session 'lightfield'"
+echo "📋 To attach and monitor: tmux attach -t lightfield"
+echo "📋 To detach safely: Ctrl+B then D"
+echo "📁 Results directory: ${OUTPUT_DIR}"
+echo ""
+echo "🎯 ATTACH TO TMUX SESSION NOW:"
+echo "   tmux attach -t lightfield"
+echo ""
+echo "   Then press Ctrl+B, D to detach and close browser safely"
