@@ -41,51 +41,8 @@ pip install torch torchvision matplotlib pillow requests numpy
 echo "🚀 Starting light field optimization..."
 echo "⏰ Started at: $(date)"
 
-# Run with all outputs saved
-python3 -c "
-import sys
-sys.path.append('/workspace/light-field-display-optimizer')
-
-# Import and run the handler directly
-exec(open('rp_handler.py').read().replace('runpod.serverless.start', '# runpod.serverless.start'))
-
-# Create job input
-job_input = {
-    'input': {
-        'iterations': 25,
-        'resolution': 128
-    }
-}
-
-print('🎯 Running complete optimization...')
-result = handler(job_input)
-
-print('\\n' + '='*80)
-print('📋 OPTIMIZATION COMPLETE!')
-print('='*80)
-
-if result.get('status') == 'success':
-    print(f'✅ SUCCESS: {result.get(\"message\", \"\")}')
-    print(f'📊 Scenes completed: {len(result.get(\"scenes_completed\", []))}')
-    print(f'📥 Total download URLs: {len(result.get(\"all_download_urls\", {}))}')
-    
-    print(f'\\n📥 ALL DOWNLOAD URLS:')
-    for name, url in result.get('all_download_urls', {}).items():
-        print(f'   {name}: {url}')
-    
-    # Save results to file
-    import json
-    with open('${OUTPUT_DIR}/optimization_results.json', 'w') as f:
-        json.dump(result, f, indent=2)
-    
-    print(f'\\n📋 Results saved to: ${OUTPUT_DIR}/optimization_results.json')
-else:
-    print(f'❌ FAILED: {result.get(\"message\", \"\")}')
-    if 'traceback' in result:
-        print(f'Error details: {result[\"traceback\"]}')
-
-print(f'\\n⏰ Completed at: $(date)')
-" > ${OUTPUT_DIR}/optimization_log.txt 2>&1
+# Run the standalone optimizer
+python3 standalone_optimizer.py > ${OUTPUT_DIR}/optimization_log.txt 2>&1
 
 echo "✅ Optimization complete!"
 echo "📁 Results saved to: ${OUTPUT_DIR}"
