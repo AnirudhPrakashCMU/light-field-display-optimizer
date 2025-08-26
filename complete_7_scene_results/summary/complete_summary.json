@@ -1,0 +1,23 @@
+{
+  "scenes_completed": [
+    "basic",
+    "complex",
+    "stick_figure",
+    "layered",
+    "office",
+    "nature",
+    "spherical_checkerboard"
+  ],
+  "total_scenes": 7,
+  "final_losses": {
+    "basic": 1.4084194845054299e-05,
+    "complex": 1.807487933547236e-05,
+    "stick_figure": 6.385369488270953e-06,
+    "layered": 1.2194208466098644e-05,
+    "office": 4.937035555485636e-06,
+    "nature": 9.141440386883914e-06,
+    "spherical_checkerboard": 0.002881887834519148
+  },
+  "iterations_per_scene": 50,
+  "resolution": 128
+}

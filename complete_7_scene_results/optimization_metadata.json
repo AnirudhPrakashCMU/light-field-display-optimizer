@@ -1,0 +1,78 @@
+{
+  "optimization_complete": true,
+  "timestamp": "2025-08-26T03:27:00.692666",
+  "execution_time_seconds": 48696,
+  "total_scenes": 7,
+  "scenes_completed": [
+    "basic",
+    "complex",
+    "stick_figure",
+    "layered",
+    "office",
+    "nature",
+    "spherical_checkerboard"
+  ],
+  "scene_final_losses": {
+    "basic": {
+      "final_loss": 1.4084194845054299e-05
+    },
+    "complex": {
+      "final_loss": 1.807487933547236e-05
+    },
+    "layered": {
+      "final_loss": 1.2194208466098644e-05
+    },
+    "nature": {
+      "final_loss": 9.141440386883914e-06
+    },
+    "office": {
+      "final_loss": 4.937035555485636e-06
+    },
+    "spherical_checkerboard": {
+      "final_loss": 0.002881887834519148
+    },
+    "stick_figure": {
+      "final_loss": 6.385369488270953e-06
+    }
+  },
+  "optimization_specs": {
+    "iterations_per_scene": 50,
+    "optical_sweeps_included": true,
+    "resolution": 128,
+    "total_scenes": 7
+  },
+  "download_urls": {
+    "basic_optical_eye_movement": "https://files.catbox.moe/g97gmo.gif",
+    "basic_optical_focal_sweep": "https://files.catbox.moe/dwrp3r.gif",
+    "basic_progress_gif": "https://files.catbox.moe/kx35wd.gif",
+    "complete_summary_json": "https://files.catbox.moe/q1m9tz.json",
+    "complex_optical_eye_movement": "https://files.catbox.moe/krakbk.gif",
+    "complex_optical_focal_sweep": "https://files.catbox.moe/tavqxf.gif",
+    "complex_progress_gif": "https://files.catbox.moe/9pquml.gif",
+    "layered_optical_eye_movement": "https://files.catbox.moe/batgqa.gif",
+    "layered_optical_focal_sweep": "https://files.catbox.moe/mf64o9.gif",
+    "layered_progress_gif": "https://files.catbox.moe/tqta98.gif",
+    "nature_optical_eye_movement": "https://files.catbox.moe/9f1ysa.gif",
+    "nature_optical_focal_sweep": "https://files.catbox.moe/g4rz32.gif",
+    "nature_progress_gif": "https://files.catbox.moe/l3fshb.gif",
+    "office_optical_eye_movement": "https://files.catbox.moe/ijeqdt.gif",
+    "office_optical_focal_sweep": "https://files.catbox.moe/5t9k50.gif",
+    "office_progress_gif": "https://files.catbox.moe/1s44vd.gif",
+    "spherical_checkerboard_optical_eye_movement": "https://files.catbox.moe/zryz0m.gif",
+    "spherical_checkerboard_optical_focal_sweep": "https://files.catbox.moe/nwike0.gif",
+    "spherical_checkerboard_progress_gif": "https://files.catbox.moe/6dwya9.gif",
+    "stick_figure_optical_eye_movement": "https://files.catbox.moe/uogtb3.gif",
+    "stick_figure_optical_focal_sweep": "https://files.catbox.moe/6pegti.gif",
+    "stick_figure_progress_gif": "https://files.catbox.moe/jnb7lz.gif"
+  },
+  "files_structure": {
+    "total_files": 22,
+    "per_scene_files": 3,
+    "summary_files": 1,
+    "scene_outputs": {
+      "optimization_progress.gif": "Shows optimization convergence (3 frames)",
+      "optical_focal_length_sweep.gif": "Eye view through optical system with focal sweep (15 frames)",
+      "optical_eye_movement_sweep.gif": "Eye view through optical system with eye movement (10 frames)"
+    }
+  }
+}
