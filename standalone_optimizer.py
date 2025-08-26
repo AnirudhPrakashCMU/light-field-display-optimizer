@@ -60,12 +60,25 @@ class SphericalCheckerboard:
         
         return ((i_square + j_square) % 2).float()
 
+# Global fixed pupil samples for consistency across all ray tracing
+_GLOBAL_PUPIL_SAMPLES = None
+
 def generate_pupil_samples(num_samples, pupil_radius):
-    angles = torch.linspace(0, 2*math.pi, num_samples, device=device)
-    radii = torch.sqrt(torch.rand(num_samples, device=device)) * pupil_radius
-    x = radii * torch.cos(angles)
-    y = radii * torch.sin(angles)
-    return torch.stack([x, y], dim=1)
+    """Generate FIXED pupil samples - same for ALL ray tracing calls"""
+    global _GLOBAL_PUPIL_SAMPLES
+    
+    if _GLOBAL_PUPIL_SAMPLES is None:
+        # Generate FIXED pattern once
+        torch.manual_seed(42)  # Fixed seed for reproducibility
+        angles = torch.linspace(0, 2*math.pi, num_samples, device=device)
+        radii = torch.sqrt(torch.linspace(0, 1, num_samples, device=device)) * pupil_radius  # Consistent radial sampling
+        x = radii * torch.cos(angles)
+        y = radii * torch.sin(angles)
+        _GLOBAL_PUPIL_SAMPLES = torch.stack([x, y], dim=1)
+    
+    # Scale to requested radius
+    scale = pupil_radius / (_GLOBAL_PUPIL_SAMPLES.norm(dim=1).max() + 1e-8)
+    return _GLOBAL_PUPIL_SAMPLES * scale
 
 def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
     oc = ray_origin - sphere_center
@@ -346,7 +359,6 @@ def render_individual_display_view(eye_position, eye_focal_length, display_syste
 def render_eye_view_through_display(eye_position, eye_focal_length, display_system, resolution=256):
     """HONEST: What eye sees through complete system - RAW AVERAGE of ALL display contributions"""
     
-    print(f"     Rendering ALL displays individually and raw averaging...")
     
     # Render EACH display individually through complete optical system
     combined_image = torch.zeros(resolution, resolution, 3, device=device)
