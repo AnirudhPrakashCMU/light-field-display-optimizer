@@ -24,6 +24,9 @@ if torch.cuda.is_available():
     torch.cuda.reset_peak_memory_stats()
     print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
 
+# Global override for samples per pixel (set by main function)
+samples_per_pixel_override = 4
+
 class SceneObject:
     """3D scene object"""
     def __init__(self, position, size, color, shape):
@@ -153,7 +156,7 @@ def render_eye_view_target(eye_position, eye_focal_length, scene_objects, resolu
     pupil_diameter = 4.0
     retina_distance = 24.0
     retina_size = 8.0
-    samples_per_pixel = 4  # Match simulated for fair comparison
+    samples_per_pixel = samples_per_pixel_override
     
     # Create retina grid
     y_coords = torch.linspace(-retina_size/2, retina_size/2, resolution, device=device)
@@ -229,7 +232,7 @@ def render_individual_display_view(eye_position, eye_focal_length, display_syste
     pupil_diameter = 4.0
     retina_distance = 24.0
     retina_size = 8.0
-    samples_per_pixel = 4
+    samples_per_pixel = samples_per_pixel_override
     
     tunable_lens_distance = 50.0
     # Use DIFFERENT tunable focal length for each display based on its focal length
@@ -738,111 +741,60 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, loc
         'elapsed_time': elapsed
     }
 
+def run_optimization_with_rays(rays_per_pixel, run_name):
+    """Run complete optimization with specified rays per pixel"""
+    print(f"\n🚀 STARTING {run_name} ({rays_per_pixel} ray{'s' if rays_per_pixel != 1 else ''} per pixel)")
+    
+    # Modify global samples_per_pixel - need to update this in both functions
+    global samples_per_pixel_override
+    samples_per_pixel_override = rays_per_pixel
+    
+    overall_start = datetime.now()
+    iterations = 50
+    resolution = 128
+    
+    print(f"⚙️ Parameters: {iterations} iterations per scene, {resolution}x{resolution}, {rays_per_pixel} ray{'s' if rays_per_pixel != 1 else ''} per pixel")
+    
+    # Create local results directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    local_results_dir = f'/workspace/light_field_results_{run_name}_{timestamp}'
+    os.makedirs(local_results_dir, exist_ok=True)
+    print(f"📁 Local results directory: {local_results_dir}")
+    
+    # ALL 7 SCENES
+    scene_names = ['basic', 'complex', 'stick_figure', 'layered', 'office', 'nature', 'spherical_checkerboard']
+    
+    all_results = {}
+    
+    for scene_name in scene_names:
+        scene_objects = create_scene_objects(scene_name)
+        scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, local_results_dir)
+        all_results[scene_name] = scene_result
+        
+        # Collect URLs for summary
+        print(f"   📥 {scene_name}: {scene_result.get('displays_url', 'No URL')}")
+    
+    overall_elapsed = (datetime.now() - overall_start).total_seconds()
+    print(f"\n✅ {run_name} COMPLETE in {overall_elapsed/60:.1f} minutes!")
+    print(f"📁 All results saved to: {local_results_dir}")
+    
+    return all_results
+
 def main():
     try:
-        overall_start = datetime.now()
-        print(f"🚀 HONEST LIGHT FIELD OPTIMIZER STARTED: {overall_start}")
-        
-        iterations = 50  # Increased to 50 iterations
-        resolution = 128
-        
-        print(f"⚙️ HONEST Parameters: {iterations} iterations per scene, {resolution}x{resolution}")
+        print(f"🚀 HONEST LIGHT FIELD OPTIMIZER - DUAL RUN STARTED")
         print(f"🎯 Display initialization: ALL BLACK seed for clear optimization progression")
         
-        # Create local results directory
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        local_results_dir = f'/workspace/light_field_results_{timestamp}'
-        os.makedirs(local_results_dir, exist_ok=True)
-        print(f"📁 Local results directory: {local_results_dir}")
+        # RUN 1: Single ray per pixel
+        results_1ray = run_optimization_with_rays(1, "1_RAY")
         
-        # ALL 7 SCENES
-        scene_names = ['basic', 'complex', 'stick_figure', 'layered', 'office', 'nature', 'spherical_checkerboard']
+        # RUN 2: Standard multi-ray (4 rays per pixel) 
+        results_4ray = run_optimization_with_rays(4, "4_RAY")
         
-        all_results = {}
-        all_urls = {}
-        
-        for scene_name in scene_names:
-            scene_objects = create_scene_objects(scene_name)
-            
-            scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, local_results_dir)
-            all_results[scene_name] = scene_result
-            
-            # Collect URLs
-            all_urls[f'{scene_name}_progress_gif'] = scene_result['progress_url']
-            all_urls[f'{scene_name}_displays'] = scene_result['displays_url']
-            all_urls[f'{scene_name}_eye_views'] = scene_result['eye_views_url']
-            all_urls[f'{scene_name}_focal_sweep_through_display'] = scene_result['focal_sweep_url']
-            all_urls[f'{scene_name}_eye_movement_through_display'] = scene_result['eye_movement_url']
-            all_urls[f'{scene_name}_REAL_scene_focal_sweep'] = scene_result['real_scene_focal_sweep_url']
-            all_urls[f'{scene_name}_REAL_scene_eye_movement'] = scene_result['real_scene_eye_movement_url']
-            
-            torch.cuda.empty_cache()
-        
-        overall_time = (datetime.now() - overall_start).total_seconds()
-        
-        print(f"\n" + "="*80)
-        print("🎉 HONEST OPTIMIZATION FINISHED!")
-        print(f"⏰ Total time: {overall_time:.1f} seconds ({overall_time/60:.1f} minutes)")
-        print(f"📊 Scenes completed: {len(all_results)}")
-        print(f"📥 Total download URLs: {len(all_urls)}")
-        print("="*80)
-        
-        print(f"\n📥 ALL DOWNLOAD URLS:")
-        for name, url in all_urls.items():
-            print(f"   {name}: {url}")
-        
-        # Save results
-        results_file = f'/workspace/HONEST_optimization_results_{timestamp}.json'
-        
-        complete_results = {
-            'status': 'success',
-            'timestamp': datetime.now().isoformat(),
-            'total_time_seconds': overall_time,
-            'scenes_completed': list(all_results.keys()),
-            'total_scenes': len(all_results),
-            'all_download_urls': all_urls,
-            'scene_results': {name: {'final_loss': result['final_loss'], 'time': result['elapsed_time']} for name, result in all_results.items()},
-            'optimization_specs': {
-                'iterations_per_scene': iterations,
-                'resolution': resolution,
-                'total_scenes': 7,
-                'outputs_per_scene': 7,
-                'total_outputs': len(all_urls),
-                'display_initialization': 'ALL_BLACK',
-                'all_displays_optimized': True,
-                'focal_length_weighting': True,
-                'real_ray_tracing_all_scenes': True,
-                'no_cheating': True
-            }
-        }
-        
-        with open(results_file, 'w') as f:
-            json.dump(complete_results, f, indent=2)
-        
-        # Create ZIP
-        print(f"\n📦 Creating ZIP archive...")
-        zip_path = f'/workspace/honest_light_field_optimization_{timestamp}.zip'
-        
-        import zipfile
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, files in os.walk(local_results_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, '/workspace')
-                    zipf.write(file_path, arcname)
-            
-            zipf.write(results_file, f'honest_optimization_{timestamp}/results.json')
-        
-        zip_size = os.path.getsize(zip_path) / 1024**2
-        print(f"📦 ZIP created: {zip_path} ({zip_size:.1f} MB)")
-        
-        zip_url = upload_to_catbox(zip_path)
-        if zip_url:
-            print(f"📥 ZIP URL: {zip_url}")
-        
-        print(f"\n✅ HONEST OPTIMIZATION COMPLETE - ALL DISPLAYS OPTIMIZED!")
-        
-        return complete_results
+        print(f"\n🎉 BOTH OPTIMIZATION RUNS COMPLETE!")
+        print(f"✅ 1-ray optimization: 7 scenes completed") 
+        print(f"✅ 4-ray optimization: 7 scenes completed")
+        print(f"✅ All optimized display images saved in their respective directories")
         
     except Exception as e:
         import traceback
