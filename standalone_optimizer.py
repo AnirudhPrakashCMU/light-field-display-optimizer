@@ -63,25 +63,20 @@ class SphericalCheckerboard:
         
         return ((i_square + j_square) % 2).float()
 
-# Global fixed pupil samples for consistency across all ray tracing
-_GLOBAL_PUPIL_SAMPLES = None
-
 def generate_pupil_samples(num_samples, pupil_radius):
-    """Generate FIXED pupil samples - same for ALL ray tracing calls"""
-    global _GLOBAL_PUPIL_SAMPLES
+    """Generate pupil samples based on current ray count"""
+    torch.manual_seed(42)  # Fixed seed for reproducibility
     
-    if _GLOBAL_PUPIL_SAMPLES is None:
-        # Generate FIXED pattern once
-        torch.manual_seed(42)  # Fixed seed for reproducibility
-        angles = torch.linspace(0, 2*math.pi, num_samples, device=device)
-        radii = torch.sqrt(torch.linspace(0, 1, num_samples, device=device)) * pupil_radius  # Consistent radial sampling
+    if num_samples == 1:
+        # Single ray through center of pupil
+        return torch.zeros(1, 2, device=device)
+    else:
+        # Multiple rays - circular pattern
+        angles = torch.linspace(0, 2*math.pi, num_samples, device=device, endpoint=False)
+        radii = torch.sqrt(torch.linspace(0.1, 1, num_samples, device=device)) * pupil_radius
         x = radii * torch.cos(angles)
         y = radii * torch.sin(angles)
-        _GLOBAL_PUPIL_SAMPLES = torch.stack([x, y], dim=1)
-    
-    # Scale to requested radius
-    scale = pupil_radius / (_GLOBAL_PUPIL_SAMPLES.norm(dim=1).max() + 1e-8)
-    return _GLOBAL_PUPIL_SAMPLES * scale
+        return torch.stack([x, y], dim=1)
 
 def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
     oc = ray_origin - sphere_center
