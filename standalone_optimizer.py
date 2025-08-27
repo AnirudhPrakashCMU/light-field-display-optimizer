@@ -791,6 +791,33 @@ def main():
         print(f"✅ 4-ray optimization: 7 scenes completed")
         print(f"✅ All optimized display images saved in their respective directories")
         
+        # Create comprehensive ZIP archive
+        print(f"\n📦 Creating comprehensive ZIP archive...")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        zip_path = f'/workspace/DUAL_optimization_results_{timestamp}.zip'
+        
+        import zipfile
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            # Add all results from both runs
+            for root, _, files in os.walk('/workspace'):
+                for file in files:
+                    if 'light_field_results_' in root:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, '/workspace')
+                        zipf.write(file_path, arcname)
+        
+        zip_size = os.path.getsize(zip_path) / 1024**2
+        print(f"📦 ZIP created: {zip_path} ({zip_size:.1f} MB)")
+        
+        # Upload to file sharing
+        zip_url = upload_to_catbox(zip_path)
+        if zip_url:
+            print(f"📥 DOWNLOAD ALL RESULTS: {zip_url}")
+        else:
+            print(f"📁 Results saved locally: {zip_path}")
+            
+        print(f"\n✅ DUAL OPTIMIZATION COMPLETE - ALL FILES SAVED AND ZIPPED!")
+        
     except Exception as e:
         import traceback
         print(f"❌ Error: {e}")
