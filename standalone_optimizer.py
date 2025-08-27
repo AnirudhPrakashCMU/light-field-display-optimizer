@@ -72,7 +72,7 @@ def generate_pupil_samples(num_samples, pupil_radius):
         return torch.zeros(1, 2, device=device)
     else:
         # Multiple rays - circular pattern
-        angles = torch.linspace(0, 2*math.pi, num_samples, device=device, endpoint=False)
+        angles = torch.linspace(0, 2*math.pi * (num_samples-1)/num_samples, num_samples, device=device)
         radii = torch.sqrt(torch.linspace(0.1, 1, num_samples, device=device)) * pupil_radius
         x = radii * torch.cos(angles)
         y = radii * torch.sin(angles)
