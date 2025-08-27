@@ -566,9 +566,9 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, loc
     for i in range(8):
         row, col = i // 4, i % 4
         with torch.no_grad():
-            # REAL ray tracing using THIS display's focal length
-            eye_view_real = render_eye_view_through_display(
-                eye_position, display_system.focal_lengths[i].item(), display_system, resolution
+            # REAL ray tracing through THIS specific display only
+            eye_view_real = render_individual_display_view(
+                eye_position, 30.0, display_system, i, resolution
             )
         
         axes[row, col].imshow(np.clip(eye_view_real.detach().cpu().numpy(), 0, 1))
