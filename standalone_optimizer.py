@@ -777,28 +777,24 @@ def run_optimization_with_rays(rays_per_pixel, run_name):
 
 def main():
     try:
-        print(f"🚀 HONEST LIGHT FIELD OPTIMIZER - DUAL RUN STARTED")
+        print(f"🚀 HONEST LIGHT FIELD OPTIMIZER STARTED")
         print(f"🎯 Display initialization: ALL BLACK seed for clear optimization progression")
         
-        # RUN 1: Single ray per pixel
-        results_1ray = run_optimization_with_rays(1, "1_RAY")
-        
-        # RUN 2: Standard multi-ray (4 rays per pixel) 
+        # Standard multi-ray (4 rays per pixel) optimization
         results_4ray = run_optimization_with_rays(4, "4_RAY")
         
-        print(f"\n🎉 BOTH OPTIMIZATION RUNS COMPLETE!")
-        print(f"✅ 1-ray optimization: 7 scenes completed") 
+        print(f"\n🎉 OPTIMIZATION COMPLETE!")
         print(f"✅ 4-ray optimization: 7 scenes completed")
-        print(f"✅ All optimized display images saved in their respective directories")
+        print(f"✅ All optimized display images saved")
         
         # Create comprehensive ZIP archive
-        print(f"\n📦 Creating comprehensive ZIP archive...")
+        print(f"\n📦 Creating ZIP archive...")
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        zip_path = f'/workspace/DUAL_optimization_results_{timestamp}.zip'
+        zip_path = f'/workspace/optimization_results_{timestamp}.zip'
         
         import zipfile
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Add all results from both runs
+            # Add all results
             for root, _, files in os.walk('/workspace'):
                 for file in files:
                     if 'light_field_results_' in root:
@@ -816,7 +812,7 @@ def main():
         else:
             print(f"📁 Results saved locally: {zip_path}")
             
-        print(f"\n✅ DUAL OPTIMIZATION COMPLETE - ALL FILES SAVED AND ZIPPED!")
+        print(f"\n✅ OPTIMIZATION COMPLETE - ALL FILES SAVED AND ZIPPED!")
         
     except Exception as e:
         import traceback
