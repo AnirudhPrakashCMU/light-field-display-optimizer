@@ -1106,8 +1106,8 @@ def run_optimization_with_rays(rays_per_pixel, run_name):
         scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, local_results_dir)
         all_results[scene_name] = scene_result
         
-        # Run competitor inverse rendering system for textured scene
-        if scene_name == 'textured_basic':
+        # Run competitor inverse rendering system on all scenes
+        if isinstance(scene_objects, list):  # Skip SphericalCheckerboard for now
             print(f"\n🏁 COMPETITOR SYSTEM: {scene_name}")
             competitor_display = competitor_inverse_rendering(scene_objects, resolution)
             
