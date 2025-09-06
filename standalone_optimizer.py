@@ -29,11 +29,13 @@ samples_per_pixel_override = 4
 
 class SceneObject:
     """3D scene object"""
-    def __init__(self, position, size, color, shape):
+    def __init__(self, position, size, color, shape, texture_type=None, texture_params=None):
         self.position = torch.tensor(position, device=device, dtype=torch.float32)
         self.size = size
         self.color = torch.tensor(color, device=device, dtype=torch.float32)
         self.shape = shape
+        self.texture_type = texture_type
+        self.texture_params = texture_params or {}
 
 class SphericalCheckerboard:
     def __init__(self, center, radius):
@@ -62,6 +64,57 @@ class SphericalCheckerboard:
         j_square = torch.floor(j_coord / 50).long()
         
         return ((i_square + j_square) % 2).float()
+
+def apply_text_texture(intersection_points, scene_obj):
+    """Apply text texture to sphere surface"""
+    if scene_obj.texture_type != 'text':
+        return scene_obj.color.unsqueeze(0).expand(intersection_points.shape[0], -1)
+    
+    # Get sphere coordinates relative to center
+    rel_pos = intersection_points - scene_obj.position.unsqueeze(0)
+    
+    # Convert to spherical coordinates for texture mapping
+    x, y, z = rel_pos[:, 0], rel_pos[:, 1], rel_pos[:, 2]
+    
+    # Spherical coordinate mapping for texture
+    phi = torch.atan2(z, x) / (2 * math.pi) + 0.5  # [0, 1]
+    theta = torch.acos(torch.clamp(y / scene_obj.size, -1, 1)) / math.pi  # [0, 1]
+    
+    # Create text pattern based on parameters
+    text_char = scene_obj.texture_params.get('char', 'A')
+    scale = scene_obj.texture_params.get('scale', 8.0)
+    
+    # Simple text pattern generation (letter 'A', 'B', 'C', etc.)
+    if text_char == 'A':
+        # Create an 'A' pattern
+        u = (phi * scale) % 1.0
+        v = (theta * scale) % 1.0
+        
+        # A pattern: diagonal lines and horizontal bar
+        pattern = ((torch.abs(u - 0.5) < 0.1) | 
+                  (torch.abs(v - 0.5) < 0.1) |
+                  ((torch.abs(u - v) < 0.1) | (torch.abs(u + v - 1.0) < 0.1)))
+    elif text_char == 'B':
+        # Create a 'B' pattern
+        u = (phi * scale) % 1.0
+        v = (theta * scale) % 1.0
+        
+        # B pattern: vertical line and curves
+        pattern = ((u < 0.2) | 
+                  ((v < 0.2) | (v > 0.8)) |
+                  (torch.abs(v - 0.5) < 0.1))
+    else:
+        # Default grid pattern
+        u = (phi * scale) % 1.0
+        v = (theta * scale) % 1.0
+        pattern = ((u < 0.1) | (v < 0.1))
+    
+    # Apply pattern to color
+    base_color = scene_obj.color.unsqueeze(0)
+    text_color = torch.tensor([1.0, 1.0, 1.0], device=device).unsqueeze(0)
+    
+    colors = torch.where(pattern.unsqueeze(-1), text_color, base_color)
+    return colors
 
 def generate_pupil_samples(num_samples, pupil_radius):
     """Generate pupil samples based on current ray count"""
@@ -125,7 +178,12 @@ def trace_rays_to_scene(ray_origins, ray_dirs, scene_objects):
             if hit_mask.any():
                 closer_hits = hit_mask & (t < depths)
                 if closer_hits.any():
-                    colors[closer_hits] = obj.color
+                    # Calculate intersection points for texture
+                    intersection_points = ray_origins[closer_hits] + t[closer_hits].unsqueeze(-1) * ray_dirs[closer_hits]
+                    
+                    # Apply texture if available
+                    textured_colors = apply_text_texture(intersection_points, obj)
+                    colors[closer_hits] = textured_colors
                     depths[closer_hits] = t[closer_hits]
                     
         elif isinstance(obj, SphericalCheckerboard):
@@ -417,6 +475,13 @@ def create_scene_objects(scene_name):
             center=torch.tensor([0.0, 0.0, 200.0], device=device),
             radius=50.0
         )
+    elif scene_name == 'textured_basic':
+        # Simple textured scene with objects at different depths - one object per depth
+        return [
+            SceneObject([0, 0, 120], 15, [1, 0, 0], 'sphere', 'text', {'char': 'A', 'scale': 6.0}),    # 120mm depth
+            SceneObject([25, 0, 180], 12, [0, 1, 0], 'sphere', 'text', {'char': 'B', 'scale': 8.0}),   # 180mm depth
+            SceneObject([-20, 15, 240], 10, [0, 0, 1], 'sphere', 'text', {'char': 'C', 'scale': 10.0}) # 240mm depth
+        ]
     else:
         return []
 
@@ -433,6 +498,278 @@ class LightFieldDisplay(nn.Module):
         
         print(f"📺 Display initialized: {num_planes} planes, {resolution}x{resolution}, ALL BLACK seed")
         print(f"🎯 Focal lengths: {self.focal_lengths.cpu().numpy()}")
+
+def competitor_inverse_rendering(scene_objects, resolution=128):
+    """Competitor system: Direct inverse rendering without optimization"""
+    print("🏁 Running competitor inverse rendering system...")
+    
+    # Create display system
+    num_planes = 8
+    display_images = torch.zeros(num_planes, 3, resolution, resolution, device=device)
+    focal_lengths = torch.linspace(10, 100, num_planes, device=device)
+    
+    # Eye parameters
+    eye_position = torch.tensor([0.0, 0.0, 0.0], device=device)
+    eye_focal_length = 30.0
+    
+    # Optical system parameters
+    pupil_diameter = 4.0
+    retina_distance = 24.0
+    retina_size = 8.0
+    tunable_lens_distance = 50.0
+    microlens_distance = 80.0
+    microlens_pitch = 0.4
+    display_distance = 82.0
+    display_size = 20.0
+    
+    # Extract scene depths and objects
+    scene_depths = []
+    depth_objects = {}
+    
+    for obj in scene_objects:
+        if isinstance(obj, SceneObject):
+            depth = obj.position[2].item()  # z-coordinate is depth
+            if depth not in depth_objects:
+                depth_objects[depth] = []
+            depth_objects[depth].append(obj)
+            scene_depths.append(depth)
+    
+    print(f"   Found objects at depths: {list(set(scene_depths))}mm")
+    
+    # For each display plane, find matching depth objects
+    for plane_idx in range(num_planes):
+        display_focal_length = focal_lengths[plane_idx].item()
+        
+        # Find closest scene depth to this focal length
+        best_depth = None
+        best_diff = float('inf')
+        
+        for depth in set(scene_depths):
+            diff = abs(depth - display_focal_length)
+            if diff < best_diff:
+                best_diff = diff
+                best_depth = depth
+        
+        if best_depth is not None and best_diff < 30:  # Within 30mm tolerance
+            print(f"   Display {plane_idx+1} (FL:{display_focal_length:.0f}mm) -> Objects at {best_depth:.0f}mm")
+            
+            # Set tunable focal length to exactly match object depth
+            tunable_focal_length = best_depth
+            
+            # Inverse ray trace for this display
+            display_image = inverse_render_display(
+                depth_objects[best_depth], eye_position, eye_focal_length,
+                tunable_focal_length, resolution, pupil_diameter, retina_distance, 
+                retina_size, tunable_lens_distance, microlens_distance, microlens_pitch,
+                display_distance, display_size
+            )
+            
+            display_images[plane_idx] = display_image
+    
+    # Create mock display system for compatibility
+    class CompetitorDisplay:
+        def __init__(self, display_images, focal_lengths):
+            self.display_images = nn.Parameter(display_images.clone())
+            self.focal_lengths = focal_lengths
+    
+    return CompetitorDisplay(display_images, focal_lengths)
+
+def inverse_render_display(objects_at_depth, eye_position, eye_focal_length,
+                          target_depth, resolution, pupil_diameter, retina_distance,
+                          retina_size, tunable_lens_distance, microlens_distance, 
+                          microlens_pitch, display_distance, display_size):
+    """Inverse render a single display for objects at target depth"""
+    
+    display_image = torch.zeros(3, resolution, resolution, device=device)
+    
+    # Create display pixel grid
+    display_coords = torch.linspace(-display_size/2, display_size/2, resolution, device=device)
+    dy, dx = torch.meshgrid(display_coords, display_coords, indexing='ij')
+    display_points = torch.stack([
+        dx.flatten(), 
+        dy.flatten(),
+        torch.full_like(dx.flatten(), display_distance)
+    ], dim=1)
+    
+    # For each display pixel, trace ray backwards to scene
+    N = display_points.shape[0]
+    batch_size = min(512, N)
+    
+    for batch_start in range(0, N, batch_size):
+        batch_end = min(batch_start + batch_size, N)
+        batch_display_points = display_points[batch_start:batch_end]
+        batch_N = batch_display_points.shape[0]
+        
+        # Ray from eye through optical system to display pixel
+        eye_to_display = batch_display_points - eye_position.unsqueeze(0)
+        ray_dirs = eye_to_display / torch.norm(eye_to_display, dim=-1, keepdim=True)
+        
+        # Reverse ray through optical system
+        # 1. From display to microlens
+        t_to_microlens = (microlens_distance - display_distance) / ray_dirs[:, 2]
+        microlens_points = batch_display_points + t_to_microlens.unsqueeze(-1) * ray_dirs
+        
+        # 2. From microlens to tunable lens  
+        tunable_focal_length = target_depth  # Set exactly to target depth
+        tunable_lens_power = 1.0 / tunable_focal_length
+        
+        t_to_tunable = (tunable_lens_distance - microlens_distance) / ray_dirs[:, 2]
+        tunable_points = microlens_points + t_to_tunable.unsqueeze(-1) * ray_dirs
+        
+        # Apply tunable lens refraction (reverse)
+        ray_dirs[:, 0] -= tunable_lens_power * tunable_points[:, 0]
+        ray_dirs[:, 1] -= tunable_lens_power * tunable_points[:, 1]
+        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
+        
+        # 3. From tunable lens to eye lens
+        eye_lens_power = 1000.0 / eye_focal_length / 1000.0
+        t_to_eye = (0 - tunable_lens_distance) / ray_dirs[:, 2]
+        eye_points = tunable_points + t_to_eye.unsqueeze(-1) * ray_dirs
+        
+        # Apply eye lens refraction (reverse)
+        ray_dirs[:, 0] -= eye_lens_power * eye_points[:, 0]
+        ray_dirs[:, 1] -= eye_lens_power * eye_points[:, 1]
+        ray_dirs = ray_dirs / torch.norm(ray_dirs, dim=-1, keepdim=True)
+        
+        # 4. Ray from eye to scene at target depth
+        t_to_scene = target_depth / ray_dirs[:, 2]
+        scene_points = eye_points + t_to_scene.unsqueeze(-1) * ray_dirs
+        
+        # Check intersections with objects at this depth
+        colors = torch.zeros(batch_N, 3, device=device)
+        
+        for obj in objects_at_depth:
+            # Ray-sphere intersection
+            oc = eye_points - obj.position.unsqueeze(0)
+            a = torch.sum(ray_dirs * ray_dirs, dim=-1)
+            b = 2.0 * torch.sum(oc * ray_dirs, dim=-1)
+            c = torch.sum(oc * oc, dim=-1) - obj.size * obj.size
+            
+            discriminant = b * b - 4 * a * c
+            hit_mask = discriminant >= 0
+            
+            if hit_mask.any():
+                t1 = (-b - torch.sqrt(torch.clamp(discriminant, min=0))) / (2 * a)
+                t2 = (-b + torch.sqrt(torch.clamp(discriminant, min=0))) / (2 * a)
+                t = torch.where(t1 > 1e-6, t1, t2)
+                
+                intersection_points = eye_points + t.unsqueeze(-1) * ray_dirs
+                depth_diff = torch.abs(intersection_points[:, 2] - target_depth)
+                close_to_target = (depth_diff < 20) & hit_mask  # Within 20mm of target depth
+                
+                if close_to_target.any():
+                    textured_colors = apply_text_texture(intersection_points[close_to_target], obj)
+                    colors[close_to_target] = textured_colors
+        
+        # Set display pixel colors
+        pixel_indices = torch.arange(batch_start, batch_end, device=device)
+        row_indices = pixel_indices // resolution
+        col_indices = pixel_indices % resolution
+        
+        display_image[:, row_indices, col_indices] = colors.T
+    
+    return display_image
+
+def generate_competitor_outputs(scene_name, competitor_display, scene_objects, resolution, local_results_dir):
+    """Generate same debug outputs as optimization system for competitor"""
+    print(f"   Generating competitor debug outputs...")
+    
+    eye_position = torch.tensor([0.0, 0.0, 0.0], device=device)
+    eye_focal_length = 30.0
+    
+    # Save what each display shows (competitor patterns)
+    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    for i in range(8):
+        row, col = i // 4, i % 4
+        display_img = competitor_display.display_images[i].detach().cpu().numpy()
+        display_img = np.transpose(display_img, (1, 2, 0))
+        axes[row, col].imshow(np.clip(display_img, 0, 1))
+        axes[row, col].set_title(f'Display {i+1}\\nFL: {competitor_display.focal_lengths[i]:.0f}mm')
+        axes[row, col].axis('off')
+    
+    plt.suptitle(f'{scene_name.title()} COMPETITOR - What Each Display Shows')
+    plt.tight_layout()
+    displays_path = f'/tmp/{scene_name}_competitor_displays.png'
+    plt.savefig(displays_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # What eye sees for EACH display using competitor system
+    fig, axes = plt.subplots(2, 4, figsize=(16, 8))
+    for i in range(8):
+        row, col = i // 4, i % 4
+        with torch.no_grad():
+            # Eye view through this individual display
+            eye_view = render_individual_display_view(
+                eye_position, 30.0, competitor_display, i, resolution
+            )
+        
+        axes[row, col].imshow(np.clip(eye_view.detach().cpu().numpy(), 0, 1))
+        axes[row, col].set_title(f'Eye View {i+1}\\nFL: {competitor_display.focal_lengths[i]:.0f}mm')
+        axes[row, col].axis('off')
+    
+    plt.suptitle(f'{scene_name.title()} COMPETITOR - Eye Views for Each Display')
+    plt.tight_layout()
+    eye_views_path = f'/tmp/{scene_name}_competitor_eye_views.png'
+    plt.savefig(eye_views_path, dpi=150, bbox_inches='tight')
+    plt.close()
+    
+    # Focal sweep through competitor display system
+    focal_lengths_test = torch.linspace(20, 60, 20, device=device)
+    focal_frames = []
+    
+    for fl in focal_lengths_test:
+        with torch.no_grad():
+            view = render_eye_view_through_display(
+                eye_position, fl.item(), competitor_display, resolution
+            )
+        focal_frames.append((view.detach().cpu().numpy() * 255).astype(np.uint8))
+    
+    focal_sweep_gif = f'/tmp/{scene_name}_competitor_focal_sweep.gif'
+    imageio.mimsave(focal_sweep_gif, focal_frames, duration=0.2)
+    
+    # Eye movement through competitor display system  
+    eye_positions_test = torch.linspace(-5, 5, 20, device=device)
+    eye_movement_frames = []
+    
+    for eye_x in eye_positions_test:
+        eye_pos = torch.tensor([eye_x.item(), 0.0, 0.0], device=device)
+        
+        with torch.no_grad():
+            view = render_eye_view_through_display(
+                eye_pos, eye_focal_length, competitor_display, resolution
+            )
+        eye_movement_frames.append((view.detach().cpu().numpy() * 255).astype(np.uint8))
+    
+    eye_movement_gif = f'/tmp/{scene_name}_competitor_eye_movement.gif'
+    imageio.mimsave(eye_movement_gif, eye_movement_frames, duration=0.2)
+    
+    # Save locally
+    scene_local_dir = f'{local_results_dir}/scenes/{scene_name}_competitor'
+    os.makedirs(scene_local_dir, exist_ok=True)
+    
+    import shutil
+    shutil.copy2(displays_path, f'{scene_local_dir}/what_displays_show.png') 
+    shutil.copy2(eye_views_path, f'{scene_local_dir}/what_eye_sees.png')
+    shutil.copy2(focal_sweep_gif, f'{scene_local_dir}/focal_sweep_through_display.gif')
+    shutil.copy2(eye_movement_gif, f'{scene_local_dir}/eye_movement_through_display.gif')
+    
+    print(f"💾 Competitor outputs saved locally to: {scene_local_dir}")
+    
+    # Upload
+    displays_url = upload_to_catbox(displays_path)
+    eye_views_url = upload_to_catbox(eye_views_path)
+    focal_sweep_url = upload_to_catbox(focal_sweep_gif)
+    eye_movement_url = upload_to_catbox(eye_movement_gif)
+    
+    print(f"✅ {scene_name} COMPETITOR complete")
+    
+    return {
+        'displays_url': displays_url,
+        'eye_views_url': eye_views_url,
+        'focal_sweep_url': focal_sweep_url,
+        'eye_movement_url': eye_movement_url,
+        'system_type': 'competitor_inverse_rendering'
+    }
 
 def upload_to_catbox(file_path):
     if not os.path.exists(file_path):
@@ -756,15 +1093,27 @@ def run_optimization_with_rays(rays_per_pixel, run_name):
     os.makedirs(local_results_dir, exist_ok=True)
     print(f"📁 Local results directory: {local_results_dir}")
     
-    # ALL 7 SCENES
-    scene_names = ['basic', 'complex', 'stick_figure', 'layered', 'office', 'nature', 'spherical_checkerboard']
+    # ALL SCENES including textured
+    scene_names = ['basic', 'complex', 'stick_figure', 'layered', 'office', 'nature', 'spherical_checkerboard', 'textured_basic']
     
     all_results = {}
     
     for scene_name in scene_names:
         scene_objects = create_scene_objects(scene_name)
+        
+        # Run optimization-based system
+        print(f"\n🔄 OPTIMIZATION SYSTEM: {scene_name}")
         scene_result = optimize_single_scene(scene_name, scene_objects, iterations, resolution, local_results_dir)
         all_results[scene_name] = scene_result
+        
+        # Run competitor inverse rendering system for textured scene
+        if scene_name == 'textured_basic':
+            print(f"\n🏁 COMPETITOR SYSTEM: {scene_name}")
+            competitor_display = competitor_inverse_rendering(scene_objects, resolution)
+            
+            # Generate same debug outputs for competitor
+            competitor_result = generate_competitor_outputs(scene_name, competitor_display, scene_objects, resolution, local_results_dir)
+            all_results[f"{scene_name}_competitor"] = competitor_result
         
         # Collect URLs for summary
         print(f"   📥 {scene_name}: {scene_result.get('displays_url', 'No URL')}")
