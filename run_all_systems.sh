@@ -51,7 +51,7 @@ echo "Installing to: $(which python3)"
 
 python3 -m pip install --upgrade pip
 python3 -m pip install torch torchvision torchaudio --no-cache-dir
-python3 -m pip install matplotlib pillow requests numpy --no-cache-dir
+python3 -m pip install matplotlib pillow requests numpy imageio --no-cache-dir
 
 echo ""
 echo "✅ Dependencies installed"
