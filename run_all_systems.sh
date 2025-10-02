@@ -46,11 +46,18 @@ echo ""
 
 # Install dependencies ONCE at the beginning
 echo "📦 Installing dependencies..."
-pip3 install --upgrade pip
-pip3 install torch torchvision torchaudio
-pip3 install matplotlib pillow requests numpy
+echo "Python version: $(python3 --version)"
+echo "Installing to: $(which python3)"
+
+python3 -m pip install --upgrade pip
+python3 -m pip install torch torchvision torchaudio --no-cache-dir
+python3 -m pip install matplotlib pillow requests numpy --no-cache-dir
+
 echo ""
 echo "✅ Dependencies installed"
+echo "Verifying installation..."
+python3 -c "import torch; print(f'PyTorch {torch.__version__} installed successfully')"
+python3 -c "import matplotlib; print(f'Matplotlib {matplotlib.__version__} installed')"
 echo ""
 
 # ============================================
