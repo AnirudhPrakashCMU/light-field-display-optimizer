@@ -26,7 +26,7 @@ if torch.cuda.is_available():
     print(f"✅ GPU: {torch.cuda.get_device_name(0)}")
 
 # Global override for samples per pixel (set to 1 for ground truth)
-samples_per_pixel_override = 1
+samples_per_pixel_override = 8  # 8 rays per pixel for all rendering
 
 def set_rays_per_pixel(rays_per_pixel):
     """Set the global number of rays per pixel for sampling"""
@@ -476,7 +476,7 @@ def create_spherical_checkerboard(square_size):
     )
 
 class LightFieldDisplay(nn.Module):
-    def __init__(self, resolution=1024, num_planes=8):  # Much higher resolution for A100
+    def __init__(self, resolution=1024, num_planes=10):  # 10 focal planes, A100 optimized
         super().__init__()
 
         # Initialize displays with ALL BLACK for clear optimization visualization
@@ -484,10 +484,16 @@ class LightFieldDisplay(nn.Module):
             torch.zeros(num_planes, 3, resolution, resolution, device=device)
         )
 
-        self.focal_lengths = torch.linspace(10, 100, num_planes, device=device)
+        # Focal lengths linear in 1/f (optical power) for even depth sampling
+        # Range: 10mm to 100mm focal length
+        f_min, f_max = 10.0, 100.0
+        power_min, power_max = 1/f_max, 1/f_min  # 0.01 to 0.1 (1/mm)
+        powers = torch.linspace(power_min, power_max, num_planes, device=device)
+        self.focal_lengths = 1.0 / powers  # Convert back to focal lengths
 
         print(f"📺 Display initialized: {num_planes} planes, {resolution}x{resolution}, ALL BLACK seed")
-        print(f"🎯 Focal lengths: {self.focal_lengths.cpu().numpy()}")
+        print(f"🎯 Focal lengths (linear in 1/f): {self.focal_lengths.cpu().numpy()}")
+        print(f"   Powers (1/f): {powers.cpu().numpy()}")
 
         # Calculate memory usage
         param_size_mb = (num_planes * 3 * resolution * resolution * 4) / (1024**2)
@@ -904,7 +910,7 @@ def optimize_single_scene(scene_name, scene_objects, iterations, resolution, loc
     print(f"\n🎯 REAL Optimization: {scene_name} ({iterations} iterations)")
     start_time = datetime.now()
     
-    display_system = LightFieldDisplay(resolution=512, num_planes=8)
+    display_system = LightFieldDisplay(resolution=512, num_planes=10)
     optimizer = optim.AdamW(display_system.parameters(), lr=0.02)
     
     eye_position = torch.tensor([0.0, 0.0, 0.0], device=device)
@@ -1187,7 +1193,7 @@ def optimize_single_scene_fast(scene_name, scene_objects, target_image, iteratio
     start_time = datetime.now()
 
     # Higher resolution display for A100
-    display_system = LightFieldDisplay(resolution=1024, num_planes=8)
+    display_system = LightFieldDisplay(resolution=1024, num_planes=10)
     optimizer = optim.AdamW(display_system.parameters(), lr=0.03)  # Higher LR for faster convergence
 
     eye_position = torch.tensor([0.0, 0.0, 0.0], device=device)

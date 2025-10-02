@@ -10,7 +10,7 @@ Ray tracing flow:
 1. DISPLAY GENERATION: Display pixel → MLA → Sphere (inverse ray tracing)
 2. VIEWING: Camera → Tunable Lens → MLA → Display (forward ray tracing)
 
-Multi-ray sampling: 4 rays per pixel (matches optimizer) for fair comparison
+Multi-ray sampling: 8 rays per pixel (matches optimizer) for fair comparison
 """
 
 import torch
@@ -366,13 +366,13 @@ def _trace_rays_through_system(rays, mla, cam_pinhole, cam_res, apply_tunable_le
     cam_img = cam_img.reshape(cam_res, cam_res)
     return cam_img
 
-def render_camera_view(mla, cam_pinhole, cam_res=1000, apply_tunable_lens=False, tunable_focal_length=50.0, tunable_distance=25.0, samples_per_pixel=4):
+def render_camera_view(mla, cam_pinhole, cam_res=1000, apply_tunable_lens=False, tunable_focal_length=50.0, tunable_distance=25.0, samples_per_pixel=8):
     """
     Render camera view through MLA
     Camera → (Optional: Tunable Lens) → MLA → Display
 
     Args:
-        samples_per_pixel: Number of rays per pixel (matches optimizer's 4-ray sampling)
+        samples_per_pixel: Number of rays per pixel (matches optimizer's 8-ray sampling)
     """
     cam_pinhole = torch.tensor(cam_pinhole, device=device)
 
@@ -614,7 +614,7 @@ def process_pattern(pattern_type, square_size=50, save_debug=True):
     print(f"  Created {gif_filename}")
 
     # Render nominal view for main GIF (x=2mm, f=100mm)
-    nominal_view = render_camera_view(mla, [2, 0, 0], cam_res=600,
+    nominal_view = render_camera_view(mla, [2, 0, 0], cam_res=512,
                                       apply_tunable_lens=True,
                                       tunable_focal_length=100.0,
                                       tunable_distance=tunable.distance_from_camera)

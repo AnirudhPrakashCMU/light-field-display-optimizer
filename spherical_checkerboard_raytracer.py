@@ -31,7 +31,7 @@ class EyeParams:
     pupil_diameter = 4.0  # mm
     retina_distance = 24.0  # mm
     retina_size = 8.0  # mm
-    samples_per_pixel = 1  # Single ray per pixel (no blur)
+    samples_per_pixel = 8  # 8 rays per pixel (matches optimizer and competitor)
     focal_range = (20.0, 50.0)  # mm
 
 class SphericalCheckerboard:
