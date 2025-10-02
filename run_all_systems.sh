@@ -46,9 +46,9 @@ echo ""
 
 # Install dependencies ONCE at the beginning
 echo "📦 Installing dependencies..."
-pip install --upgrade pip
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-pip install matplotlib pillow requests numpy
+pip3 install --upgrade pip
+pip3 install torch torchvision torchaudio
+pip3 install matplotlib pillow requests numpy
 echo ""
 echo "✅ Dependencies installed"
 echo ""
