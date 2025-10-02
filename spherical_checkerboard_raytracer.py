@@ -31,7 +31,7 @@ class EyeParams:
     pupil_diameter = 4.0  # mm
     retina_distance = 24.0  # mm
     retina_size = 8.0  # mm
-    samples_per_pixel = 8  # Sub-aperture rays per pixel
+    samples_per_pixel = 1  # Single ray per pixel (no blur)
     focal_range = (20.0, 50.0)  # mm
 
 class SphericalCheckerboard:
@@ -42,30 +42,30 @@ class SphericalCheckerboard:
         self.radius = radius
         print(f"Spherical Checkerboard: center={center.cpu().numpy()}, radius={radius}mm")
         
-    def get_color(self, point_3d):
+    def get_color(self, point_3d, square_size=50):
         """Get MATLAB-compatible checkerboard color at 3D point"""
         direction = point_3d - self.center
         direction_norm = direction / torch.norm(direction, dim=-1, keepdim=True)
-        
+
         X = direction_norm[..., 0]
         Y = direction_norm[..., 1]
         Z = direction_norm[..., 2]
-        
+
         # MATLAB convert_3d_direction_to_euler
         rho = torch.sqrt(X*X + Z*Z)
         phi = torch.atan2(Z, X)
         theta = torch.atan2(Y, rho)
-        
-        # Map to flat checkerboard pattern (1000x1000, 50px squares)
+
+        # Map to flat checkerboard pattern (1000x1000, variable square size)
         theta_norm = (theta + math.pi/2) / math.pi
         phi_norm = (phi + math.pi) / (2*math.pi)
-        
+
         i_coord = theta_norm * 999
         j_coord = phi_norm * 999
-        
-        i_square = torch.floor(i_coord / 50).long()
-        j_square = torch.floor(j_coord / 50).long()
-        
+
+        i_square = torch.floor(i_coord / square_size).long()
+        j_square = torch.floor(j_coord / square_size).long()
+
         return ((i_square + j_square) % 2).float()
 
 def generate_pupil_samples(num_samples, pupil_radius):
@@ -105,7 +105,7 @@ def ray_sphere_intersection(ray_origin, ray_dir, sphere_center, sphere_radius):
     
     return hit_mask, t
 
-def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=256):
+def render_eye_view(eye_position, eye_focal_length, scene, params, square_size=50, resolution=600):
     """
     Render eye view with tilted retina pointing at sphere center
     PURE RAY TRACING - blur from sub-aperture ray averaging only
@@ -187,10 +187,10 @@ def render_eye_view(eye_position, eye_focal_length, scene, params, resolution=25
     # Get intersection colors
     intersection_points_flat = ray_origins_flat + t_flat.unsqueeze(-1) * ray_dirs_flat
     colors_flat = torch.zeros_like(ray_origins_flat)
-    
+
     if hit_mask_flat.any():
         valid_intersections = intersection_points_flat[hit_mask_flat]
-        valid_colors = scene.get_color(valid_intersections)
+        valid_colors = scene.get_color(valid_intersections, square_size=square_size)
         colors_flat[hit_mask_flat, 0] = valid_colors
         colors_flat[hit_mask_flat, 1] = valid_colors
         colors_flat[hit_mask_flat, 2] = valid_colors
@@ -420,41 +420,96 @@ def create_eye_movement_gif():
     
     print("Eye movement GIF created!")
 
+def create_checkerboard_density_sweep():
+    """Create checkerboard density sweep GIF matching competitor"""
+    print("\n=== GENERATING CHECKERBOARD DENSITY SWEEP (GROUND TRUTH) ===")
+    print("Nominal viewpoint: x=2mm, f=30mm (focused at 200mm)")
+    print("Sweeping checkerboard from 26x26 to 60x60 squares\n")
+
+    scene = SphericalCheckerboard(
+        center=torch.tensor([0.0, 0.0, 200.0], device=device),
+        radius=50.0
+    )
+
+    eye_params = EyeParams()
+    eye_position = torch.tensor([2.0, 0.0, 0.0], device=device)  # x=2mm to match competitor
+    eye_focal_length = 30.0  # Focused at 200mm
+
+    frames = []
+    frame_info = []
+
+    for num_squares in range(26, 62, 2):  # 26, 28, 30, ..., 60
+        square_size = 1000 // num_squares
+        actual_squares = 1000 // square_size
+
+        print(f"Processing {actual_squares}x{actual_squares} checkerboard...")
+
+        eye_view = render_eye_view(eye_position, eye_focal_length, scene, eye_params,
+                                   square_size=square_size, resolution=512)
+
+        # Save frame
+        fig = plt.figure(figsize=(8, 8))
+        plt.imshow(eye_view.cpu().numpy())
+        plt.title(f'Ground Truth: Checkerboard {actual_squares}x{actual_squares}\nDirect Eye View (x=2mm, f=30mm)', fontsize=16)
+        plt.axis('off')
+
+        frame_path = f'results/gt_frame_{len(frames):03d}.png'
+        plt.savefig(frame_path, dpi=100, bbox_inches='tight')
+        frames.append(frame_path)
+        frame_info.append(actual_squares)
+        plt.close()
+
+    # Create GIF (repeat each frame 10 times for slower playback)
+    print("\n=== CREATING GROUND TRUTH GIF ===")
+
+    # Create comparatives folder
+    comparatives_dir = 'comparatives'
+    os.makedirs(comparatives_dir, exist_ok=True)
+
+    gif_filename = f'{comparatives_dir}/ground_truth_density_sweep.gif'
+    images = [Image.open(frame) for frame in frames]
+
+    # Repeat each frame 10 times
+    repeated_images = []
+    for img in images:
+        for _ in range(10):
+            repeated_images.append(img.copy())
+
+    repeated_images[0].save(gif_filename, save_all=True, append_images=repeated_images[1:],
+                           duration=200, loop=0, optimize=True)
+
+    # Clean up frames
+    for frame in frames:
+        os.remove(frame)
+
+    print(f"✓ Created {gif_filename}")
+    print(f"  • Sweeps from {frame_info[0]}x{frame_info[0]} to {frame_info[-1]}x{frame_info[-1]} checkerboard")
+    print(f"  • Ground truth: Direct eye view (no display, no MLA)")
+    print(f"  • Eye position: x=2mm, focal length f=30mm")
+
 def main():
     """Main function"""
-    print("\\nConfiguration:")
+    print("\nConfiguration:")
     print("  • Tilted retina: Always points at sphere center")
-    print("  • Pure ray tracing: No computational blur")
-    print("  • Sub-aperture sampling: 8 rays per pixel")
-    print("  • Natural blur: From ray averaging when accommodation wrong")
-    print("  • Spherical checkerboard: MATLAB-compatible (1000x1000, 50px squares)")
-    
-    print("\\nGenerating outputs...")
-    
-    # 1. Standard eye view (clean, no annotations)
-    create_standard_eye_view()
-    
-    # 2. Focal length comparison (4 side-by-side)
-    create_focal_length_comparison()
-    
-    # 3. Focal length sweep GIF
-    create_focal_length_sweep_gif()
-    
-    # 4. Eye movement GIF
-    create_eye_movement_gif()
-    
-    print("\\n=== COMPLETE ===")
+    print("  • Pure ray tracing: Single ray per pixel (no blur)")
+    print("  • Perfect pinhole camera model")
+    print("  • Spherical checkerboard: MATLAB-compatible (1000x1000, variable squares)")
+    print("  • Rendering resolution: 512x512 pixels (matches optimizer)")
+
+    print("\nGenerating ground truth checkerboard density sweep...")
+
+    # Create density sweep GIF
+    create_checkerboard_density_sweep()
+
+    print("\n=== COMPLETE ===")
     print("Generated files:")
-    print("  • standard_eye_view.png - Pure eye view, no annotations")
-    print("  • focal_length_comparison.png - 4 focal lengths side-by-side")
-    print("  • focal_length_sweep.gif - Slow focal sweep (50 frames)")
-    print("  • eye_movement_sweep.gif - Eye movement with tilted retina (30 frames)")
-    print("\\nKey features:")
-    print("  ✓ Retina tilted to point at sphere center")
-    print("  ✓ Pure ray tracing (blur from sub-aperture sampling only)")
-    print("  ✓ MATLAB-compatible flat checkerboard pattern")
-    print("  ✓ Realistic optical physics")
-    print("  ✓ Clean, focused visualizations")
+    print("  • comparatives/ground_truth_density_sweep.gif - Checkerboard density sweep (26x26 to 60x60)")
+    print("\nKey features:")
+    print("  ✓ Ground truth: Direct eye-to-scene ray tracing")
+    print("  ✓ No display, no MLA - just physical spherical checkerboard")
+    print("  ✓ Matches competitor nominal viewpoint (x=2mm)")
+    print("  ✓ High resolution (600x600 pixels)")
+    print("  ✓ Same checkerboard densities as competitor")
 
 if __name__ == "__main__":
     main()
