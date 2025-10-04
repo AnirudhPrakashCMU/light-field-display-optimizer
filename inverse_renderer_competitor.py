@@ -631,7 +631,7 @@ def main():
     frames = []
     frame_info = []
 
-    for num_squares in range(26, 62, 2):  # 26, 28, 30, ..., 60
+    for num_squares in range(25, 61, 5):  # 25, 30, 35, ..., 60
         square_size = 1000 // num_squares
 
         # Process pattern and get nominal view

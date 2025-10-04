@@ -1268,7 +1268,7 @@ def run_checkerboard_density_sweep():
     print(f"   🔥 LARGE BATCHES: Optimized for 40GB VRAM")
 
     overall_start = datetime.now()
-    iterations = 100  # More iterations with faster convergence
+    iterations = 50  # Faster iterations for checkerboard sweep
     resolution = 512  # Much higher resolution (was 128)
 
     print(f"⚙️ Parameters: {iterations} iterations per checkerboard, {resolution}x{resolution}, 1 ray per pixel")
@@ -1285,7 +1285,7 @@ def run_checkerboard_density_sweep():
     all_targets = []
     all_square_counts = []
 
-    for num_squares in range(26, 62, 2):  # 26, 28, 30, ..., 60
+    for num_squares in range(25, 61, 5):  # 25, 30, 35, ..., 60
         square_size = 1000 // num_squares
         actual_squares = 1000 // square_size
         checkerboard_configs.append((square_size, actual_squares))
