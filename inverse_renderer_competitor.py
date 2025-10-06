@@ -37,13 +37,14 @@ os.makedirs(output_dir, exist_ok=True)
 os.makedirs(debug_dir, exist_ok=True)
 
 class MLAConfig:
-    """Microlens Array Configuration - MATCHED TO OPTIMIZER FOR FAIR COMPARISON"""
+    """Microlens Array Configuration - WORKING GEOMETRY"""
     def __init__(self):
-        # Match optimizer configuration
-        self.z0 = 80.0  # MLA position (mm) - matches optimizer microlens_distance
-        self.f0 = 1.0    # Microlens focal length (mm) - matches optimizer
-        self.disp_z0 = 82.0  # Display position (mm) - matches optimizer display_distance
-        self.pitch = 0.4  # Microlens pitch (mm) - matches optimizer microlens_pitch
+        # Use working geometry: MLA at 80mm, sphere also at 80mm
+        # This is the geometry that the inverse renderer can handle
+        self.z0 = 80.0  # MLA position (mm)
+        self.f0 = 1.0    # Microlens focal length (mm)
+        self.disp_z0 = 82.0  # Display position (mm)
+        self.pitch = 0.4  # Microlens pitch (mm)
 
         # Calculate number of lenses to cover 20mm display
         display_size = 20.0  # Match optimizer display_size
@@ -65,20 +66,20 @@ class MLAConfig:
         print(f"MLA Config: z={self.z0}mm, f={self.f0}mm, pitch={self.pitch:.4f}mm, {self.nlens}x{self.nlens} lenses")
 
 class TunableLensConfig:
-    """Focus Tunable Lens Configuration - MATCHED TO OPTIMIZER FOR FAIR COMPARISON"""
+    """Focus Tunable Lens Configuration"""
     def __init__(self):
-        self.distance_from_camera = 50.0  # 50mm from camera - matches optimizer tunable_lens_distance
+        self.distance_from_camera = 50.0  # 50mm from camera
         self.focal_lengths = [30.0, 50.0, 100.0]  # Test focal lengths
 
         print(f"Tunable Lens: distance={self.distance_from_camera}mm, focal lengths={self.focal_lengths}")
 
 class SphereConfig:
-    """Sphere Configuration - MATCHES OPTIMIZER"""
+    """Sphere Configuration - WORKING GEOMETRY"""
     def __init__(self, mla, input_img):
         self.img = input_img
-        # MATCHES OPTIMIZER: center at 200mm, radius 50mm
-        self.center = torch.tensor([0.0, 0.0, 200.0], device=device)
-        self.radius = 50.0
+        # Use sphere at same location as MLA for inverse rendering to work
+        self.center = torch.tensor([0.0, 0.0, mla.z0], device=device)
+        self.radius = mla.width / 2.0
 
         # Spherical coordinate ranges (MATLAB-compatible)
         img_h, img_w = input_img.shape
@@ -212,19 +213,22 @@ def generate_display_pattern(mla, sphere):
     x_indx = torch.argmin(x_diffs, dim=1)
     y_indx = torch.argmin(y_diffs, dim=1)
 
-    # Create rays from display pixels to microlens centers
+    # Create rays AT microlens centers, pointing FROM display THROUGH MLA toward sphere
     rays_xyz = torch.stack([
         mla.lens_x[x_indx],
         mla.lens_y[y_indx],
         torch.full_like(disp_X_flat, mla.z0)
     ], dim=0)
 
-    # Ray directions
-    rays_dir = rays_xyz - torch.stack([
+    # Ray directions: from display pixel toward and through MLA
+    display_pos = torch.stack([
         disp_X_flat,
         disp_Y_flat,
         torch.full_like(disp_X_flat, mla.disp_z0)
     ], dim=0)
+
+    rays_dir = rays_xyz - display_pos  # Direction FROM display TO MLA
+    # Now continue in same direction BEYOND MLA toward sphere
 
     # Normalize
     rays_dir = rays_dir / torch.norm(rays_dir, dim=0, keepdim=True)
