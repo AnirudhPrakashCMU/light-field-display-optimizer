@@ -73,11 +73,12 @@ class TunableLensConfig:
         print(f"Tunable Lens: distance={self.distance_from_camera}mm, focal lengths={self.focal_lengths}")
 
 class SphereConfig:
-    """Sphere Configuration"""
+    """Sphere Configuration - MATCHES OPTIMIZER"""
     def __init__(self, mla, input_img):
         self.img = input_img
-        self.center = torch.tensor([0.0, 0.0, mla.z0], device=device)
-        self.radius = mla.width / 2.0
+        # MATCHES OPTIMIZER: center at 200mm, radius 50mm
+        self.center = torch.tensor([0.0, 0.0, 200.0], device=device)
+        self.radius = 50.0
 
         # Spherical coordinate ranges (MATLAB-compatible)
         img_h, img_w = input_img.shape
