@@ -613,10 +613,10 @@ def process_pattern(pattern_type, square_size=50, save_debug=True):
 
     print(f"  Created {gif_filename}")
 
-    # Render nominal view for main GIF (x=2mm, f=100mm)
-    nominal_view = render_camera_view(mla, [2, 0, 0], cam_res=512,
+    # Render nominal view for main GIF (MATCHES OPTIMIZER: x=0mm, f=30mm)
+    nominal_view = render_camera_view(mla, [0, 0, 0], cam_res=512,
                                       apply_tunable_lens=True,
-                                      tunable_focal_length=100.0,
+                                      tunable_focal_length=30.0,
                                       tunable_distance=tunable.distance_from_camera)
 
     return nominal_view, num_squares
@@ -624,8 +624,8 @@ def process_pattern(pattern_type, square_size=50, save_debug=True):
 def main():
     """Main execution"""
     print("\n=== GENERATING CHECKERBOARD DENSITY SWEEP ===")
-    print("Nominal viewpoint: x=2mm, f=100mm")
-    print("Sweeping checkerboard from 26x26 to 60x60 squares\n")
+    print("Nominal viewpoint: x=0mm, f=30mm (MATCHES OPTIMIZER)")
+    print("Sweeping checkerboard from 25 to 60 squares (steps of 5)\n")
 
     # Checkerboard configurations: 26x26 to 60x60 (increment by 2)
     frames = []
@@ -640,7 +640,7 @@ def main():
         # Save frame for main GIF
         fig = plt.figure(figsize=(8, 8))
         plt.imshow(nominal_view.cpu().numpy(), cmap='gray')
-        plt.title(f'Checkerboard {actual_squares}x{actual_squares} - Nominal View (x=2mm, f=100mm)', fontsize=16)
+        plt.title(f'Competitor: Checkerboard {actual_squares}x{actual_squares}\n(x=0mm, f=30mm - matches optimizer)', fontsize=14)
         plt.axis('off')
 
         frame_path = f'{output_dir}/main_frame_{len(frames):03d}.png'
@@ -676,7 +676,8 @@ def main():
     print(f"\n=== COMPLETE ===")
     print(f"Main output: {gif_filename}")
     print(f"  • Sweeps from {frame_info[0]}x{frame_info[0]} to {frame_info[-1]}x{frame_info[-1]} checkerboard")
-    print(f"  • Nominal viewpoint: camera x=2mm, focal length f=100mm")
+    print(f"  • Nominal viewpoint: camera x=0mm, focal length f=30mm (MATCHES OPTIMIZER)")
+    print(f"  • 8 rays per pixel, 512x512 rendering, 1024x1024 displays")
     print(f"\nDebug outputs: {debug_dir}/")
     print(f"  • *_input.png - Input patterns")
     print(f"  • *_display.png - Generated displays (inverse ray tracing)")
