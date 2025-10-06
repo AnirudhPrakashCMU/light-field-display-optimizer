@@ -37,13 +37,13 @@ os.makedirs(output_dir, exist_ok=True)
 os.makedirs(debug_dir, exist_ok=True)
 
 class MLAConfig:
-    """Microlens Array Configuration - MATCHED TO OPTIMIZER FOR FAIR COMPARISON"""
+    """Microlens Array Configuration"""
     def __init__(self):
-        # Match optimizer configuration
-        self.z0 = 80.0  # MLA position (mm) - matches optimizer microlens_distance
-        self.f0 = 1.0    # Microlens focal length (mm) - matches optimizer
-        self.disp_z0 = 82.0  # Display position (mm) - matches optimizer display_distance
-        self.pitch = 0.4  # Microlens pitch (mm) - matches optimizer microlens_pitch
+        # Working geometry - sphere at same distance as MLA
+        self.z0 = 80.0  # MLA position (mm)
+        self.f0 = 1.0    # Microlens focal length (mm)
+        self.disp_z0 = 82.0  # Display position (mm)
+        self.pitch = 0.4  # Microlens pitch (mm)
 
         # Calculate number of lenses to cover 20mm display
         display_size = 20.0  # Match optimizer display_size
@@ -76,6 +76,7 @@ class SphereConfig:
     """Sphere Configuration"""
     def __init__(self, mla, input_img):
         self.img = input_img
+        # Sphere at same z as MLA for inverse rendering to work
         self.center = torch.tensor([0.0, 0.0, mla.z0], device=device)
         self.radius = mla.width / 2.0
 

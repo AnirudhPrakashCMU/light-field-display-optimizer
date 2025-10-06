@@ -470,8 +470,8 @@ def render_eye_view_through_display(eye_position, eye_focal_length, display_syst
 def create_spherical_checkerboard(square_size):
     """Create spherical checkerboard with specified square size"""
     return SphericalCheckerboard(
-        center=torch.tensor([0.0, 0.0, 200.0], device=device),
-        radius=50.0,
+        center=torch.tensor([0.0, 0.0, 80.0], device=device),  # MATCHES COMPETITOR: 80mm
+        radius=10.0,  # MATCHES COMPETITOR: 10mm radius
         square_size=square_size
     )
 
