@@ -10,7 +10,7 @@ Ray tracing flow:
 1. DISPLAY GENERATION: Display pixel → MLA → Sphere (inverse ray tracing)
 2. VIEWING: Camera → Tunable Lens → MLA → Display (forward ray tracing)
 
-Multi-ray sampling: 8 rays per pixel (matches optimizer) for fair comparison
+Multi-ray sampling: 8 rays per pixel for fair comparison
 """
 
 import torch
@@ -37,13 +37,13 @@ os.makedirs(output_dir, exist_ok=True)
 os.makedirs(debug_dir, exist_ok=True)
 
 class MLAConfig:
-    """Microlens Array Configuration"""
+    """Microlens Array Configuration - MATCHED TO OPTIMIZER FOR FAIR COMPARISON"""
     def __init__(self):
-        # Working geometry - sphere at same distance as MLA
-        self.z0 = 80.0  # MLA position (mm)
-        self.f0 = 1.0    # Microlens focal length (mm)
-        self.disp_z0 = 82.0  # Display position (mm)
-        self.pitch = 0.4  # Microlens pitch (mm)
+        # Match optimizer configuration
+        self.z0 = 80.0  # MLA position (mm) - matches optimizer microlens_distance
+        self.f0 = 1.0    # Microlens focal length (mm) - matches optimizer
+        self.disp_z0 = 82.0  # Display position (mm) - matches optimizer display_distance
+        self.pitch = 0.4  # Microlens pitch (mm) - matches optimizer microlens_pitch
 
         # Calculate number of lenses to cover 20mm display
         display_size = 20.0  # Match optimizer display_size
@@ -76,7 +76,6 @@ class SphereConfig:
     """Sphere Configuration"""
     def __init__(self, mla, input_img):
         self.img = input_img
-        # Sphere at same z as MLA for inverse rendering to work
         self.center = torch.tensor([0.0, 0.0, mla.z0], device=device)
         self.radius = mla.width / 2.0
 
@@ -373,7 +372,7 @@ def render_camera_view(mla, cam_pinhole, cam_res=1000, apply_tunable_lens=False,
     Camera → (Optional: Tunable Lens) → MLA → Display
 
     Args:
-        samples_per_pixel: Number of rays per pixel (matches optimizer's 8-ray sampling)
+        samples_per_pixel: Number of rays per pixel (8 rays for smooth rendering)
     """
     cam_pinhole = torch.tensor(cam_pinhole, device=device)
 
@@ -614,10 +613,10 @@ def process_pattern(pattern_type, square_size=50, save_debug=True):
 
     print(f"  Created {gif_filename}")
 
-    # Render nominal view for main GIF (MATCHES OPTIMIZER: x=0mm, f=30mm)
-    nominal_view = render_camera_view(mla, [0, 0, 0], cam_res=512,
+    # Render nominal view for main GIF (x=2mm, f=100mm)
+    nominal_view = render_camera_view(mla, [2, 0, 0], cam_res=600,
                                       apply_tunable_lens=True,
-                                      tunable_focal_length=30.0,
+                                      tunable_focal_length=100.0,
                                       tunable_distance=tunable.distance_from_camera)
 
     return nominal_view, num_squares
@@ -625,14 +624,14 @@ def process_pattern(pattern_type, square_size=50, save_debug=True):
 def main():
     """Main execution"""
     print("\n=== GENERATING CHECKERBOARD DENSITY SWEEP ===")
-    print("Nominal viewpoint: x=0mm, f=30mm (MATCHES OPTIMIZER)")
-    print("Sweeping checkerboard from 25 to 60 squares (steps of 5)\n")
+    print("Nominal viewpoint: x=2mm, f=100mm")
+    print("Sweeping checkerboard from 26x26 to 60x60 squares\n")
 
     # Checkerboard configurations: 26x26 to 60x60 (increment by 2)
     frames = []
     frame_info = []
 
-    for num_squares in range(25, 61, 5):  # 25, 30, 35, ..., 60
+    for num_squares in range(26, 62, 2):  # 26, 28, 30, ..., 60
         square_size = 1000 // num_squares
 
         # Process pattern and get nominal view
@@ -641,7 +640,7 @@ def main():
         # Save frame for main GIF
         fig = plt.figure(figsize=(8, 8))
         plt.imshow(nominal_view.cpu().numpy(), cmap='gray')
-        plt.title(f'Competitor: Checkerboard {actual_squares}x{actual_squares}\n(x=0mm, f=30mm - matches optimizer)', fontsize=14)
+        plt.title(f'Checkerboard {actual_squares}x{actual_squares} - Nominal View (x=2mm, f=100mm)', fontsize=16)
         plt.axis('off')
 
         frame_path = f'{output_dir}/main_frame_{len(frames):03d}.png'
@@ -677,8 +676,7 @@ def main():
     print(f"\n=== COMPLETE ===")
     print(f"Main output: {gif_filename}")
     print(f"  • Sweeps from {frame_info[0]}x{frame_info[0]} to {frame_info[-1]}x{frame_info[-1]} checkerboard")
-    print(f"  • Nominal viewpoint: camera x=0mm, focal length f=30mm (MATCHES OPTIMIZER)")
-    print(f"  • 8 rays per pixel, 512x512 rendering, 1024x1024 displays")
+    print(f"  • Nominal viewpoint: camera x=2mm, focal length f=100mm")
     print(f"\nDebug outputs: {debug_dir}/")
     print(f"  • *_input.png - Input patterns")
     print(f"  • *_display.png - Generated displays (inverse ray tracing)")
