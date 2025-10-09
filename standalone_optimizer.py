@@ -1320,11 +1320,21 @@ def run_checkerboard_density_sweep():
             scene_name, scene_objects, all_targets[idx], iterations, resolution, local_results_dir
         )
 
-        # Render optimized eye view at nominal position
-        eye_position_nominal = torch.tensor([2.0, 0.0, 0.0], device=device)
-        eye_focal_length_nominal = 30.0
+        # Save optimized display system
+        scene_dir = f"{local_results_dir}/scenes/{scene_name}"
+        display_save_path = f"{scene_dir}/optimized_displays.pt"
+        print(f"   Saving optimized displays to {display_save_path}...")
+        torch.save({
+            'display_images': scene_result['display_system'].display_images.detach().cpu(),
+            'focal_lengths': scene_result['display_system'].focal_lengths.detach().cpu(),
+            'scene_name': scene_name
+        }, display_save_path)
 
-        print(f"   Rendering optimized eye view at nominal position (x=2mm, f=30mm)...")
+        # Render optimized eye view at nominal position with f=100mm
+        eye_position_nominal = torch.tensor([0.0, 0.0, 0.0], device=device)
+        eye_focal_length_nominal = 100.0
+
+        print(f"   Rendering optimized eye view at nominal position (x=0mm, f=100mm)...")
         with torch.no_grad():
             eye_view = render_eye_view_through_display(
                 eye_position_nominal, eye_focal_length_nominal, scene_result['display_system'], resolution
@@ -1342,7 +1352,7 @@ def run_checkerboard_density_sweep():
     for i, (eye_view, num_sq) in enumerate(zip(all_eye_views, all_square_counts)):
         fig = plt.figure(figsize=(8, 8))
         plt.imshow(np.clip(eye_view, 0, 1))
-        plt.title(f'Optimized Display System\nCheckerboard {num_sq}x{num_sq}\n(Eye at x=2mm, f=30mm)', fontsize=16)
+        plt.title(f'Optimized Display System\nCheckerboard {num_sq}x{num_sq}\n(Eye at x=0mm, f=100mm)', fontsize=16)
         plt.axis('off')
 
         frame_path = f'{local_results_dir}/opt_eye_frame_{i:03d}.png'
